@@ -1,3 +1,0 @@
-model: llama-7b
-context_length: 4096
-temperature: 0.7
