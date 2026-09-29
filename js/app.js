@@ -478,7 +478,7 @@ function generateMetrics() {
     ram: {
       usedGb: ramUsed,
       totalGb: state.deviceInfo?.ram?.totalGb || 0,
-      displayTotal: state.deviceInfo?.ram?.displayTotal || 'Unknown',
+      displayTotal: state.deviceInfo?.ram?.displayTotal || (state.deviceInfo?.ram?.totalGb ? `${state.deviceInfo.ram.totalGb} GB` : 'Unknown'),
     },
     ssd: {
       // Real storage numbers from navigator.storage.estimate()
