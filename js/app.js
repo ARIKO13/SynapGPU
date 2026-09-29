@@ -901,7 +901,9 @@ function renderMetrics() {
   const ramPct = ramTotal > 0 ? (m.ram.usedGb / ramTotal) * 100 : 0;
   $('#ram-pct').textContent = ramPct.toFixed(0);
   $('#ram-used').textContent = m.ram.usedGb.toFixed(2);
-  $('#ram-total').textContent = m.ram.displayTotal || m.ram.totalGb || 0;
+  // Display total: avoid double "GB" — displayTotal already includes "GB"
+  const ramTotalDisplay = m.ram.displayTotal || `${m.ram.totalGb} GB`;
+  $('#ram-total').textContent = ramTotalDisplay.replace(/\s*GB\s*$/, '');
   $('#ram-bar').style.width = `${ramPct}%`;
   const ramCard = $('#cpu-metrics-grid .metric-card[data-accent="amber"]');
   if (ramCard) applyAccentClass(ramCard, ramPct);
