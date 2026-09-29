@@ -121,6 +121,11 @@
             <span>Test LLM</span>
             <span id="chat-tab-pulse" class="tab-pulse hidden"></span>
           </button>
+          <button class="tab" data-tab="benchmark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            <span>Benchmark</span>
+            <span id="benchmark-tab-pulse" class="tab-pulse hidden"></span>
+          </button>
         </div>
 
         <section id="tab-dashboard" class="tab-panel active">
@@ -256,6 +261,69 @@
             </button>
           </div>
           <p class="chat-footer-note">Powered by Python Flask + httpx → ZAI API · Streaming token-by-token</p>
+        </section>
+
+        <section id="tab-benchmark" class="tab-panel">
+          <div id="benchmark-empty" class="benchmark-empty">
+            <div class="benchmark-empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            </div>
+            <p class="be-title">Belum ada data benchmark</p>
+            <p class="be-sub">Pergi ke tab <strong>Test LLM</strong>, kirim beberapa prompt, lalu kembali ke sini. Setiap response otomatis di-analyze di 6 dimensi: reasoning, code, math, knowledge, speed, coherence.</p>
+          </div>
+          <div id="benchmark-content" class="benchmark-content hidden">
+            <!-- Verdict -->
+            <div class="verdict-card">
+              <div class="verdict-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                <span>Verdict</span>
+                <span id="verdict-tests-count" class="verdict-meta">0 tests</span>
+              </div>
+              <div id="verdict-main" class="verdict-main"></div>
+              <div id="verdict-detail" class="verdict-detail"></div>
+            </div>
+
+            <!-- Radar Charts -->
+            <div class="benchmark-grid two-col">
+              <div class="benchmark-card">
+                <div class="bc-header">
+                  <span class="bc-title">Capability Profile</span>
+                  <span class="bc-subtitle">User's LLM — 6 dimensi</span>
+                </div>
+                <svg id="radar-user" class="radar-chart" viewBox="0 0 320 280"></svg>
+                <div class="radar-legend">
+                  <span class="legend-item"><span class="dot emerald"></span> User's LLM</span>
+                  <span class="legend-item"><span class="dot zinc"></span> Comparison: <span id="radar-compare-name">—</span></span>
+                </div>
+                <select id="radar-compare-select" class="bc-select"></select>
+              </div>
+              <div class="benchmark-card">
+                <div class="bc-header">
+                  <span class="bc-title">Dimension Scores</span>
+                  <span class="bc-subtitle">Detail per-dimensi</span>
+                </div>
+                <div id="dim-scores" class="dim-scores"></div>
+              </div>
+            </div>
+
+            <!-- Bar Chart Comparison -->
+            <div class="benchmark-card">
+              <div class="bc-header">
+                <span class="bc-title">Overall Score Comparison</span>
+                <span class="bc-subtitle">User's LLM vs LLM publik (MMLU/HumanEval/GSM8K avg)</span>
+              </div>
+              <svg id="bar-chart" class="bar-chart" viewBox="0 0 700 320"></svg>
+            </div>
+
+            <!-- Test History -->
+            <div class="benchmark-card">
+              <div class="bc-header">
+                <span class="bc-title">Test History</span>
+                <button id="clear-benchmark-btn" class="btn-ghost">Clear</button>
+              </div>
+              <div id="test-history" class="test-history"></div>
+            </div>
+          </div>
         </section>
       </main>
     </div>
