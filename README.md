@@ -1,5 +1,12 @@
 # SynapGPU
 
+> 🌐 **Live Demo**: https://ariko13.github.io/SynapGPU/
+>
+> The demo runs entirely in your browser with simulated telemetry and mock
+> LLM responses — perfect for previewing the UI. For the full app with real
+> backend (file uploads, live GPU/CPU/RAM metrics, real LLM chat), follow
+> the [Quickstart](#quickstart) below.
+
 A WebGPU-style notebook platform — drag & drop LLM/dataset files, click Run,
 monitor real device telemetry (CPU/RAM/SSD/GPU) in real time, and benchmark
 your loaded model against public LLMs.
