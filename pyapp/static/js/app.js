@@ -22,6 +22,9 @@ const state = {
   uptimeTimer: null,
   benchmarkResults: [],   // array of {id, prompt, response, analysis, ts}
   radarCompareKey: 'gpt4',  // which benchmark LLM to overlay on radar
+  deviceInfo: null,         // real specs detected at server startup
+  cpuUtilHistory: [],       // for CPU chart
+  cpuUtil: 0,               // last known CPU util
 };
 
 const MAX_HISTORY = 60;
@@ -358,24 +361,117 @@ function renderConnection() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Device info — fetch real specs once on load and render the Device card.
+// Also toggles between "GPU metrics grid" and "No GPU detected" warning.
+// ---------------------------------------------------------------------------
+async function fetchDeviceInfo() {
+  try {
+    const res = await fetch('/api/device-info');
+    if (!res.ok) return;
+    state.deviceInfo = await res.json();
+    renderDeviceInfo();
+  } catch (e) { /* server unavailable; skip */ }
+}
+
+function renderDeviceInfo() {
+  const info = state.deviceInfo;
+  if (!info) return;
+
+  // Hostname (best-effort — backend doesn't expose this; show CPU model truncated)
+  const hostname = info.cpu.model.split(/\s+/).slice(0, 4).join(' ');
+  $('#di-hostname').textContent = hostname;
+
+  // CPU
+  $('#di-cpu').textContent = info.cpu.model;
+  $('#di-cpu').title = info.cpu.model;
+  $('#di-cores').textContent = `${info.cpu.coresPhysical}P / ${info.cpu.coresLogical}L`;
+  $('#cpu-cores-footer').textContent = `${info.cpu.coresLogical} logical cores`;
+
+  // RAM & Disk
+  $('#di-ram').textContent = `${info.ram.totalGb} GB`;
+  $('#ram-total').textContent = info.ram.totalGb;
+  $('#di-disk').textContent = `${info.disk.totalGb} GB`;
+  $('#ssd-total').textContent = info.disk.totalGb;
+
+  // GPU
+  const gpuAvailEl = $('#gpu-unavailable');
+  const gpuMetricsEl = $('#gpu-metrics-grid');
+  const gpuChartEl = $('#gpu-chart-card');
+  const gpuTempWrap = $('#gpu-temp-wrap');
+  const gpuPowerWrap = $('#gpu-power-wrap');
+
+  if (info.gpu.available) {
+    $('#di-gpu').textContent = info.gpu.name;
+    $('#di-gpu').title = info.gpu.name;
+    $('#di-gpu').classList.add('accent');
+    $('#di-vram').textContent = `${info.gpu.vramTotalGb} GB`;
+    $('#di-vram').classList.add('accent');
+    $('#gpu-vram-total').textContent = info.gpu.vramTotalGb;
+    gpuAvailEl?.classList.add('hidden');
+    gpuMetricsEl?.classList.remove('hidden');
+    gpuChartEl?.classList.remove('hidden');
+  } else {
+    $('#di-gpu').textContent = 'Not detected';
+    $('#di-gpu').classList.add('muted');
+    $('#di-vram').textContent = '—';
+    $('#di-vram').classList.add('muted');
+    gpuAvailEl?.classList.remove('hidden');
+    gpuMetricsEl?.classList.add('hidden');
+    gpuChartEl?.classList.add('hidden');
+    if (gpuTempWrap) gpuTempWrap.textContent = '—';
+    if (gpuPowerWrap) gpuPowerWrap.textContent = '—';
+  }
+}
+
 function renderMetrics() {
   if (!state.metrics) return;
   const m = state.metrics;
   $('#status-time').textContent = new Date(m.ts).toLocaleTimeString('id-ID', { hour12: false });
 
-  // GPU
-  const gpuUtil = m.gpu.utilization;
-  $('#gpu-util').textContent = gpuUtil.toFixed(1);
-  $('#gpu-util-bar').style.width = `${gpuUtil}%`;
-  $('#gpu-vram').textContent = m.gpu.memoryUsedGb.toFixed(1);
-  $('#gpu-vram-total').textContent = m.gpu.memoryTotalGb.toFixed(0);
-  const gpuMemPct = (m.gpu.memoryUsedGb / m.gpu.memoryTotalGb) * 100;
-  $('#gpu-mem').textContent = gpuMemPct.toFixed(1);
-  $('#gpu-mem-bar').style.width = `${gpuMemPct}%`;
-  // Apply accent to GPU cards
-  const cards = $$('#tab-dashboard .metric-card');
-  if (cards[0]) applyAccentClass(cards[0], gpuUtil);
-  if (cards[1]) applyAccentClass(cards[1], gpuMemPct);
+  const gpuAvailable = !!m.gpu.available;
+
+  // CPU (always available)
+  const cpuUtil = m.cpu?.utilization ?? 0;
+  state.cpuUtil = cpuUtil;
+  state.cpuUtilHistory.push(cpuUtil);
+  if (state.cpuUtilHistory.length > MAX_HISTORY) state.cpuUtilHistory.shift();
+  const cpuUtilEl = $('#cpu-util');
+  const cpuUtilBar = $('#cpu-util-bar');
+  if (cpuUtilEl) cpuUtilEl.textContent = cpuUtil.toFixed(1);
+  if (cpuUtilBar) cpuUtilBar.style.width = `${cpuUtil}%`;
+  const cpuCard = $('#cpu-metrics-grid .metric-card');
+  if (cpuCard) applyAccentClass(cpuCard, cpuUtil);
+
+  // GPU (conditional)
+  if (gpuAvailable && m.gpu.utilization !== undefined) {
+    const gpuUtil = m.gpu.utilization;
+    $('#gpu-util').textContent = gpuUtil.toFixed(1);
+    $('#gpu-util-bar').style.width = `${gpuUtil}%`;
+    $('#gpu-vram').textContent = m.gpu.memoryUsedGb.toFixed(1);
+    $('#gpu-vram-total').textContent = m.gpu.memoryTotalGb.toFixed(0);
+    const gpuMemPct = (m.gpu.memoryUsedGb / m.gpu.memoryTotalGb) * 100;
+    $('#gpu-mem').textContent = gpuMemPct.toFixed(1);
+    $('#gpu-mem-bar').style.width = `${gpuMemPct}%`;
+    // GPU temp/power
+    const tempWrap = $('#gpu-temp-wrap');
+    const powerWrap = $('#gpu-power-wrap');
+    if (tempWrap) tempWrap.textContent = `${m.gpu.tempC.toFixed(0)}°C`;
+    if (powerWrap) powerWrap.textContent = `${m.gpu.powerW.toFixed(0)} W`;
+    // Push GPU util to its history + draw chart
+    state.gpuUtilHistory.push(gpuUtil);
+    if (state.gpuUtilHistory.length > MAX_HISTORY) state.gpuUtilHistory.shift();
+    drawSparkline('#gpu-mem-spark', state.metricsHistory.map((x) => (x.gpu.memoryUsedGb / x.gpu.memoryTotalGb) * 100), '#10b981');
+    const gpuCards = $$('#gpu-metrics-grid .metric-card');
+    if (gpuCards[0]) applyAccentClass(gpuCards[0], gpuUtil);
+    if (gpuCards[1]) applyAccentClass(gpuCards[1], gpuMemPct);
+    // GPU chart
+    const avg = state.gpuUtilHistory.length
+      ? state.gpuUtilHistory.reduce((a, b) => a + b, 0) / state.gpuUtilHistory.length
+      : 0;
+    $('#gpu-avg').textContent = avg.toFixed(1);
+    drawLineChart('#gpu-chart', state.gpuUtilHistory, '#10b981', 100);
+  }
 
   // RAM
   const ramPct = (m.ram.usedGb / m.ram.totalGb) * 100;
@@ -383,7 +479,9 @@ function renderMetrics() {
   $('#ram-used').textContent = m.ram.usedGb.toFixed(1);
   $('#ram-total').textContent = m.ram.totalGb;
   $('#ram-bar').style.width = `${ramPct}%`;
-  if (cards[2]) applyAccentClass(cards[2], ramPct);
+  // Apply accent to RAM card (in cpu-metrics-grid)
+  const ramCard = $('#cpu-metrics-grid .metric-card[data-accent="amber"]');
+  if (ramCard) applyAccentClass(ramCard, ramPct);
 
   // SSD
   const ssdPct = (m.ssd.usedGb / m.ssd.totalGb) * 100;
@@ -395,29 +493,22 @@ function renderMetrics() {
   $('#ssd-write').textContent = m.ssd.writeMbps.toFixed(0);
   $('#ssd-read-2').textContent = m.ssd.readMbps.toFixed(0);
   $('#ssd-write-2').textContent = m.ssd.writeMbps.toFixed(0);
+  const ssdCard = $('#cpu-metrics-grid .metric-card[data-accent="rose"]');
+  if (ssdCard) applyAccentClass(ssdCard, ssdPct);
 
-  // Secondary metrics
-  $('#gpu-temp').textContent = m.gpu.tempC.toFixed(0);
-  $('#gpu-power').textContent = m.gpu.powerW.toFixed(0);
+  // Network
   $('#net-rx').textContent = m.net.rxMbps.toFixed(1);
   $('#net-tx').textContent = m.net.txMbps.toFixed(1);
 
   // Footer summary
-  $('#footer-gpu').textContent = gpuUtil.toFixed(0);
+  $('#footer-gpu').textContent = gpuAvailable ? (m.gpu.utilization ?? 0).toFixed(0) : '—';
   $('#footer-ram').textContent = ramPct.toFixed(0);
   $('#footer-ssd').textContent = ssdPct.toFixed(0);
   $('#footer-files').textContent = state.files.length;
 
-  // Sparklines
-  drawSparkline('#gpu-mem-spark', state.metricsHistory.map((x) => (x.gpu.memoryUsedGb / x.gpu.memoryTotalGb) * 100), '#10b981');
+  // RAM sparkline (always)
   drawSparkline('#ram-spark', state.metricsHistory.map((x) => (x.ram.usedGb / x.ram.totalGb) * 100), '#06b6d4');
-
-  // Big chart
-  const avg = state.gpuUtilHistory.length
-    ? state.gpuUtilHistory.reduce((a, b) => a + b, 0) / state.gpuUtilHistory.length
-    : 0;
-  $('#gpu-avg').textContent = avg.toFixed(1);
-  drawLineChart('#gpu-chart', state.gpuUtilHistory, '#10b981', 100);
+  // SSD chart (always — replaced the GPU-only chart when no GPU)
   drawLineChart('#ssd-chart', state.ssdReadHistory, '#f59e0b', 1000);
 }
 
@@ -1262,6 +1353,8 @@ function init() {
 
   // Refresh file list from server (in case there's stale state)
   refreshFiles();
+  // Fetch real device specs (CPU, RAM, GPU model) for the Device card
+  fetchDeviceInfo();
 }
 
 document.addEventListener('DOMContentLoaded', init);

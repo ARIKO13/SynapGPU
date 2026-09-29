@@ -130,7 +130,48 @@
               <span id="status-text" class="status-text">System idle</span>
               <span id="status-time" class="status-time"></span>
             </div>
-            <div class="metric-grid">
+            <div class="device-info-card" id="device-info-card">
+              <div class="di-header">
+                <span>Device</span>
+                <span id="di-hostname" class="di-hostname"></span>
+              </div>
+              <div class="di-grid">
+                <div class="di-item">
+                  <span class="di-label">CPU</span>
+                  <span id="di-cpu" class="di-value">—</span>
+                </div>
+                <div class="di-item">
+                  <span class="di-label">Cores</span>
+                  <span id="di-cores" class="di-value">—</span>
+                </div>
+                <div class="di-item">
+                  <span class="di-label">RAM</span>
+                  <span id="di-ram" class="di-value">—</span>
+                </div>
+                <div class="di-item">
+                  <span class="di-label">Disk</span>
+                  <span id="di-disk" class="di-value">—</span>
+                </div>
+                <div class="di-item">
+                  <span class="di-label">GPU</span>
+                  <span id="di-gpu" class="di-value">—</span>
+                </div>
+                <div class="di-item">
+                  <span class="di-label">VRAM</span>
+                  <span id="di-vram" class="di-value">—</span>
+                </div>
+              </div>
+            </div>
+            <div id="gpu-unavailable" class="gpu-unavailable hidden">
+              <div class="gu-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              </div>
+              <div class="gu-content">
+                <p class="gu-title">No GPU detected</p>
+                <p class="gu-sub">nvidia-smi not found on this host. GPU metrics are disabled. Install nvidia drivers or run on a GPU machine to see real GPU usage.</p>
+              </div>
+            </div>
+            <div id="gpu-metrics-grid" class="metric-grid hidden">
               <div class="metric-card" data-accent="emerald">
                 <div class="metric-header">
                   <span class="metric-label">GPU Util</span>
@@ -148,6 +189,17 @@
                 <div class="metric-value"><span id="gpu-mem">0.0</span>%</div>
                 <div class="metric-progress"><div id="gpu-mem-bar" class="progress-bar"></div></div>
                 <div class="metric-footer"><svg id="gpu-mem-spark" class="sparkline" viewBox="0 0 200 40" preserveAspectRatio="none"></svg></div>
+              </div>
+            </div>
+            <div id="cpu-metrics-grid" class="metric-grid">
+              <div class="metric-card" data-accent="emerald">
+                <div class="metric-header">
+                  <span class="metric-label">CPU Util</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="metric-icon"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+                </div>
+                <div class="metric-value"><span id="cpu-util">0.0</span>%</div>
+                <div class="metric-progress"><div id="cpu-util-bar" class="progress-bar"></div></div>
+                <div class="metric-footer"><span id="cpu-cores-footer">— cores</span></div>
               </div>
               <div class="metric-card" data-accent="amber">
                 <div class="metric-header">
@@ -169,15 +221,13 @@
                 <div class="metric-progress"><div id="ssd-bar" class="progress-bar"></div></div>
                 <div class="metric-footer">R <span id="ssd-read">0</span> · W <span id="ssd-write">0</span> MB/s</div>
               </div>
-            </div>
-            <div class="metric-grid secondary">
-              <div class="metric-card-sm" data-accent="emerald">
+              <div class="metric-card-sm" data-accent="amber">
                 <span class="sm-label">GPU Temp</span>
-                <span class="sm-value"><span id="gpu-temp">35</span>°C</span>
+                <span class="sm-value" id="gpu-temp-wrap">—</span>
               </div>
               <div class="metric-card-sm" data-accent="amber">
                 <span class="sm-label">GPU Power</span>
-                <span class="sm-value"><span id="gpu-power">25</span> W</span>
+                <span class="sm-value" id="gpu-power-wrap">—</span>
               </div>
               <div class="metric-card-sm" data-accent="cyan">
                 <span class="sm-label">Net RX</span>
@@ -188,17 +238,19 @@
                 <span class="sm-value"><span id="net-tx">0.0</span> Mbps</span>
               </div>
             </div>
-            <div class="chart-card">
+            <div id="ssd-chart-card" class="chart-card">
+              <div class="chart-header">
+                <span class="chart-title">SSD Throughput · 60s</span>
+                <span class="chart-avg">R <span id="ssd-read-2">0</span> · W <span id="ssd-write-2">0</span> MB/s</span>
+              </div>
+              <svg id="ssd-chart" class="chart" viewBox="0 0 800 50" preserveAspectRatio="none"></svg>
+            </div>
+            <div id="gpu-chart-card" class="chart-card hidden">
               <div class="chart-header">
                 <span class="chart-title">GPU Utilization · 60s</span>
                 <span class="chart-avg"><span id="gpu-avg">0.0</span>% avg</span>
               </div>
               <svg id="gpu-chart" class="chart" viewBox="0 0 800 100" preserveAspectRatio="none"></svg>
-              <div class="chart-footer">
-                <span>SSD Read <span id="ssd-read-2">0</span> MB/s</span>
-                <span>SSD Write <span id="ssd-write-2">0</span> MB/s</span>
-              </div>
-              <svg id="ssd-chart" class="chart small" viewBox="0 0 800 50" preserveAspectRatio="none"></svg>
             </div>
           </div>
         </section>

@@ -17,14 +17,15 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 import subprocess
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable
 
 import httpx
 import psutil
@@ -136,19 +137,6 @@ def serialize_file(f: FileRecord) -> dict:
 # ---------------------------------------------------------------------------
 # Real telemetry collection
 # ---------------------------------------------------------------------------
-TOTAL_VRAM_GB = 24.0  # RTX-class card assumption; overridden by nvidia-smi if available
-
-# Smoothed state for simulated GPU (used when no real GPU is present).
-_gpu_state = {
-    "util": 0.0,
-    "mem_used": 0.0,
-    "temp_c": 35.0,
-    "power_w": 25.0,
-    "ssd_read": 0.0,
-    "ssd_write": 0.0,
-    "net_rx": 0.5,
-    "net_tx": 0.5,
-}
 
 _prev_disk_io = psutil.disk_io_counters() if hasattr(psutil, "disk_io_counters") else None
 _prev_net_io = psutil.net_io_counters() if hasattr(psutil, "net_io_counters") else None
@@ -156,7 +144,8 @@ _prev_ts = time.time()
 
 
 def _drift(prev: float, target: float, step: float, lo: float, hi: float) -> float:
-    delta = (target - prev) * 0.18 + ( (hash(str(time.time())) % 1000) / 1000 - 0.5) * step
+    """Smooth interpolation toward target — used for chart smoothing only."""
+    delta = (target - prev) * 0.18 + ((hash(str(time.time())) % 1000) / 1000 - 0.5) * step
     return max(lo, min(hi, prev + delta))
 
 
@@ -168,22 +157,77 @@ def read_nvidia_smi() -> dict | None:
         out = subprocess.check_output(
             [
                 "nvidia-smi",
-                "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
+                "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,name",
                 "--format=csv,noheader,nounits",
             ],
             timeout=2,
             text=True,
         ).strip().splitlines()[0]
-        util, mem_used, mem_total, temp, power = [v.strip() for v in out.split(",")]
+        parts = [v.strip() for v in out.split(",")]
+        if len(parts) < 5:
+            return None
+        util, mem_used, mem_total, temp, power = parts[0], parts[1], parts[2], parts[3], parts[4]
+        name = parts[5] if len(parts) > 5 else "Unknown GPU"
         return {
             "util": float(util),
             "mem_used_mib": float(mem_used),
             "mem_total_mib": float(mem_total),
             "temp_c": float(temp),
             "power_w": float(power) if power.lower() != "[n/a]" else 0.0,
+            "name": name,
         }
     except Exception:
         return None
+
+
+def get_device_info() -> dict:
+    """Detect real device specs once on startup: CPU, RAM, disk, GPU (if any)."""
+    # CPU
+    try:
+        cpu_model = "Unknown CPU"
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.lower().startswith("model name"):
+                    cpu_model = line.split(":", 1)[1].strip()
+                    break
+    except Exception:
+        cpu_model = platform.processor() or "Unknown CPU"
+    cpu_cores = psutil.cpu_count(logical=True) or 0
+    cpu_cores_physical = psutil.cpu_count(logical=False) or 0
+
+    # RAM
+    vm = psutil.virtual_memory()
+    ram_total_gb = round(vm.total / (1024**3), 2)
+
+    # Disk
+    du = psutil.disk_usage("/")
+    disk_total_gb = round(du.total / (1024**3), 2)
+
+    # GPU — read real if available, else explicitly null
+    smi = read_nvidia_smi()
+    if smi:
+        gpu = {
+            "available": True,
+            "name": smi["name"],
+            "vramTotalGb": round(smi["mem_total_mib"] / 1024, 2),
+        }
+    else:
+        gpu = {"available": False, "name": None, "vramTotalGb": 0}
+
+    return {
+        "cpu": {
+            "model": cpu_model,
+            "coresPhysical": cpu_cores_physical,
+            "coresLogical": cpu_cores,
+        },
+        "ram": {"totalGb": ram_total_gb},
+        "disk": {"totalGb": disk_total_gb},
+        "gpu": gpu,
+    }
+
+
+# Cache device info at module load (specs don't change at runtime).
+DEVICE_INFO = None
 
 
 def collect_metrics() -> dict:
@@ -196,6 +240,12 @@ def collect_metrics() -> dict:
     vm = psutil.virtual_memory()
     ram_total = vm.total / (1024**3)
     ram_used = vm.used / (1024**3)
+
+    # CPU utilization (rolling 1-second average)
+    try:
+        cpu_util = psutil.cpu_percent(interval=None)
+    except Exception:
+        cpu_util = 0.0
 
     # SSD
     du = psutil.disk_usage("/")
@@ -226,7 +276,9 @@ def collect_metrics() -> dict:
 
     _prev_ts = now
 
-    # GPU — prefer real nvidia-smi; otherwise simulate based on run state.
+    # GPU — read real nvidia-smi if available; otherwise return None.
+    # We DO NOT simulate fake GPU metrics. If there's no GPU, the dashboard
+    # shows a clear "No GPU detected" state instead of fake numbers.
     smi = read_nvidia_smi()
     if smi:
         gpu = {
@@ -235,68 +287,14 @@ def collect_metrics() -> dict:
             "memoryTotalGb": smi["mem_total_mib"] / 1024,
             "tempC": smi["temp_c"],
             "powerW": smi["power_w"],
+            "available": True,
         }
     else:
-        # Simulated GPU telemetry that reacts to run state.
-        if session.run_state == "loading":
-            util_target = 35.0
-            _gpu_state["mem_used"] = min(TOTAL_VRAM_GB * 0.78, _gpu_state["mem_used"] + 0.45)
-            temp_target = 50.0
-            power_target = 140.0
-            ssd_read_target = 850.0
-            ssd_write_target = 20.0
-            net_rx_target = 5.0
-        elif session.run_state == "running":
-            util_target = 72.0 + 14 * (hash(str(int(now))) % 1000) / 1000
-            if _gpu_state["mem_used"] < TOTAL_VRAM_GB * 0.55:
-                _gpu_state["mem_used"] = TOTAL_VRAM_GB * 0.55
-            temp_target = 71.0
-            power_target = 280.0
-            ssd_read_target = 60.0
-            ssd_write_target = 35.0
-            net_rx_target = 8.0 if session.chat_active else 2.0
-        elif session.run_state == "error":
-            util_target = 5.0
-            temp_target = 40.0
-            power_target = 35.0
-            ssd_read_target = 0.0
-            ssd_write_target = 0.0
-            net_rx_target = 0.5
-        else:  # idle / stopped
-            util_target = 0.0
-            _gpu_state["mem_used"] = max(0.0, _gpu_state["mem_used"] - 0.4)
-            temp_target = 35.0
-            power_target = 25.0
-            ssd_read_target = 0.0
-            ssd_write_target = 0.0
-            net_rx_target = 0.5
-
-        _gpu_state["util"] = _drift(_gpu_state["util"], util_target, 6.0, 0.0, 100.0)
-        _gpu_state["temp_c"] = _drift(_gpu_state["temp_c"], temp_target, 1.0, 30.0, 90.0)
-        _gpu_state["power_w"] = _drift(_gpu_state["power_w"], power_target, 18.0, 15.0, 450.0)
-        # Use REAL disk/network rates when system is idle so the user sees
-        # actual disk activity, but boost toward simulated values when busy.
-        _gpu_state["ssd_read"] = _drift(_gpu_state["ssd_read"], max(disk_read_mbps, ssd_read_target), 80, 0, 2000)
-        _gpu_state["ssd_write"] = _drift(_gpu_state["ssd_write"], max(disk_write_mbps, ssd_write_target), 30, 0, 800)
-        _gpu_state["net_rx"] = _drift(_gpu_state["net_rx"], max(net_rx_mbps, net_rx_target), 1.5, 0, 50)
-        _gpu_state["net_tx"] = _drift(_gpu_state["net_tx"], net_tx_mbps, 1.2, 0, 50)
-
-        gpu = {
-            "utilization": _gpu_state["util"],
-            "memoryUsedGb": _gpu_state["mem_used"],
-            "memoryTotalGb": TOTAL_VRAM_GB,
-            "tempC": _gpu_state["temp_c"],
-            "powerW": _gpu_state["power_w"],
-        }
-        # Use the smoothed rates for display when simulated.
-        if not smi:
-            disk_read_mbps = _gpu_state["ssd_read"]
-            disk_write_mbps = _gpu_state["ssd_write"]
-            net_rx_mbps = _gpu_state["net_rx"]
-            net_tx_mbps = _gpu_state["net_tx"]
+        gpu = {"available": False}
 
     return {
         "ts": int(now * 1000),
+        "cpu": {"utilization": round(cpu_util, 1)},
         "gpu": gpu,
         "ram": {"usedGb": round(ram_used, 2), "totalGb": round(ram_total, 2)},
         "ssd": {
@@ -306,7 +304,7 @@ def collect_metrics() -> dict:
             "writeMbps": round(disk_write_mbps, 1),
         },
         "net": {"rxMbps": round(net_rx_mbps, 2), "txMbps": round(net_tx_mbps, 2)},
-        "gpu_real": bool(smi),
+        "gpu_available": bool(smi),
     }
 
 
@@ -328,6 +326,12 @@ socketio = SocketIO(
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
+
+
+# ----- REST API: device info (real specs detected at startup) -------------
+@app.route("/api/device-info", methods=["GET"])
+def device_info():
+    return jsonify(DEVICE_INFO)
 
 
 # ----- REST API: files ----------------------------------------------------
@@ -575,12 +579,22 @@ def metrics_broadcaster():
 # Entrypoint
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    # Detect real device specs once at startup.
+    DEVICE_INFO = get_device_info()
     print("=" * 60)
     print("  SynapGPU — Flask backend")
+    print(f"  CPU:         {DEVICE_INFO['cpu']['model']}")
+    print(f"               {DEVICE_INFO['cpu']['coresPhysical']}P / {DEVICE_INFO['cpu']['coresLogical']}L cores")
+    print(f"  RAM:         {DEVICE_INFO['ram']['totalGb']} GB")
+    print(f"  Disk:        {DEVICE_INFO['disk']['totalGb']} GB")
+    if DEVICE_INFO['gpu']['available']:
+        print(f"  GPU:         {DEVICE_INFO['gpu']['name']} ({DEVICE_INFO['gpu']['vramTotalGb']} GB VRAM)")
+    else:
+        print(f"  GPU:         NOT DETECTED (no nvidia-smi found)")
+        print(f"               Dashboard will show 'No GPU' state — no fake metrics.")
     print(f"  ZAI base URL: {ZAI_BASE_URL}")
     print(f"  ZAI API key: {'set' if ZAI_API_KEY else 'MISSING'}")
     print(f"  Upload dir:  {UPLOAD_DIR}")
-    print(f"  nvidia-smi:  {'available' if shutil.which('nvidia-smi') else 'not found — using simulated GPU'}")
     print("  Listening on http://0.0.0.0:3000")
     print("=" * 60)
     threading.Thread(target=metrics_broadcaster, daemon=True).start()
