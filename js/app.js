@@ -291,15 +291,21 @@ async function detectBattery() {
 
 /**
  * Master device info — calls all detectors and assembles the result.
+ * Uses Promise.allSettled so a failure in one detector (e.g. Battery API
+ * not supported) doesn't break the others.
  */
 async function detectDeviceInfo() {
   log('Detecting device specs…', 'info');
-  const [gpu, cpu, storage, battery] = await Promise.all([
+  const results = await Promise.allSettled([
     detectGPU(),
     detectCPUAsync(),
     detectStorage(),
     detectBattery(),
   ]);
+  const gpu = results[0].status === 'fulfilled' ? results[0].value : { available: false, reason: 'detection failed' };
+  const cpu = results[1].status === 'fulfilled' ? results[1].value : detectCPU();
+  const storage = results[2].status === 'fulfilled' ? results[2].value : { unavailable: true };
+  const battery = results[3].status === 'fulfilled' ? results[3].value : { unavailable: true };
   const ram = detectRAM();
   const network = detectNetwork();
   const screen = {
@@ -1439,7 +1445,24 @@ function wireDropzone() {
 // ===========================================================================
 async function init() {
   // Detect real device specs first — this is the whole point of the app.
-  state.deviceInfo = await detectDeviceInfo();
+  // Wrap in try/catch so a detection failure (e.g. battery API rejection)
+  // doesn't block the rest of the UI from rendering.
+  try {
+    state.deviceInfo = await detectDeviceInfo();
+  } catch (e) {
+    log(`Device detection error: ${e.message}`, 'error');
+    // Fallback so the UI still renders with placeholders
+    state.deviceInfo = {
+      cpu: detectCPU(),
+      ram: detectRAM(),
+      disk: { unavailable: true },
+      gpu: { available: false, reason: `detection failed: ${e.message}` },
+      network: detectNetwork(),
+      battery: { unavailable: true },
+      browser: detectBrowser(),
+    };
+  }
+
   // Initial storage estimate
   if (navigator.storage?.estimate) {
     try {
