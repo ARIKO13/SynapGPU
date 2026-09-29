@@ -71,13 +71,13 @@ function connectSocket() {
 
   socket.on('connect', () => {
     state.connected = true;
-    log('Telemetry stream connected.', 'success');
+    log('Telemetry connected.', 'success');
     renderConnection();
   });
 
   socket.on('disconnect', () => {
     state.connected = false;
-    log('Telemetry stream disconnected.', 'warn');
+    log('Telemetry disconnected.', 'warn');
     renderConnection();
   });
 
@@ -96,10 +96,10 @@ function connectSocket() {
     state.runState = s.runState;
     state.activeModel = s.activeModel;
     state.runStartedAt = s.runStartedAt;
-    if (s.runState === 'loading') log('Loading model into VRAM…', 'info');
-    else if (s.runState === 'running') log('Model ready — inference server online.', 'success');
-    else if (s.runState === 'stopped') log('Run stopped by user.', 'warn');
-    else if (s.runState === 'idle') log('Session idle.', 'info');
+    if (s.runState === 'loading') log('Loading model…', 'info');
+    else if (s.runState === 'running') log('Model ready.', 'success');
+    else if (s.runState === 'stopped') log('Stopped.', 'warn');
+    else if (s.runState === 'idle') log('Idle.', 'info');
     renderRunState();
   });
 }
@@ -111,7 +111,7 @@ async function uploadFiles(fileList) {
   const files = Array.from(fileList);
   if (files.length === 0) return;
   $('#dropzone').classList.add('uploading');
-  log(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}: ${files.map((f) => f.name).join(', ')}`, 'info');
+  log(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`, 'info');
   try {
     const formData = new FormData();
     files.forEach((f) => formData.append('files', f));
@@ -135,11 +135,11 @@ async function deleteFile(id) {
     const res = await fetch(`/api/files?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     state.files = state.files.filter((f) => f.id !== id);
-    log(`File dihapus.`, 'info');
+    log(`File deleted.`, 'info');
     renderFiles();
     renderRunState();
   } catch (e) {
-    log(`Gagal hapus: ${e.message}`, 'error');
+    log(`Delete failed: ${e.message}`, 'error');
   }
 }
 
@@ -150,7 +150,7 @@ async function clearAllFiles() {
     } catch (e) { /* ignore */ }
   }
   state.files = [];
-  log('Semua file dibersihkan.', 'info');
+  log('All files cleared.', 'info');
   renderFiles();
   renderRunState();
 }
@@ -173,7 +173,7 @@ async function refreshFiles() {
 async function handleRun() {
   const llmFile = state.files.find((f) => f.category === 'llm');
   const model = llmFile ? llmFile.name : null;
-  log(`Run dispatched for model: ${model ?? '(no model)'}`, 'info');
+  log(`Run: ${model ?? '(no model)'}`, 'info');
   try {
     await fetch('/api/run', {
       method: 'POST',
@@ -188,7 +188,7 @@ async function handleRun() {
 }
 
 async function handleStop() {
-  log('Stop dispatched.', 'warn');
+  log('Stop.', 'warn');
   try {
     await fetch('/api/run', {
       method: 'POST',
@@ -278,7 +278,7 @@ async function sendMessage() {
                 state.benchmarkResults = state.benchmarkResults.slice(-MAX_BENCHMARK);
               }
               renderBenchmark();
-              log(`Benchmark: response scored ${analysis.overall}/100 (R:${analysis.scores.reasoning} C:${analysis.scores.code} M:${analysis.scores.math})`, 'info');
+              log(`Scored ${analysis.overall}/100`, 'info');
             }
           } else if (evt.type === 'error') {
             $('#chat-error').textContent = evt.message;
@@ -289,11 +289,11 @@ async function sendMessage() {
         } catch { /* skip */ }
       }
     }
-    log('Chat response complete.', 'success');
+    log('Response complete.', 'success');
     renderChatMessages();
   } catch (e) {
     if (e.name === 'AbortError') {
-      log('Chat dibatalkan oleh user.', 'warn');
+      log('Chat aborted.', 'warn');
     } else {
       $('#chat-error').textContent = e.message;
       $('#chat-error').classList.remove('hidden');
@@ -669,32 +669,15 @@ function renderConsole() {
 function renderChatMessages() {
   const container = $('#chat-messages');
   if (state.chatMessages.length === 0) {
-    container.innerHTML = `
-      <div class="chat-empty">
-        <div class="chat-empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-        </div>
-        <p class="ce-title">Test LLM yang sudah di-load</p>
-        <p id="ce-sub" class="ce-sub">${state.runState !== 'running'
-          ? 'Klik tombol Run di header dulu untuk load model. Setelah status berubah "running", chat ini aktif.'
-          : 'Ketik pesan dan tekan Cmd/Ctrl+Enter atau klik tombol kirim. Response stream token-by-token.'}</p>
-        <div class="ce-suggestions">
-          <button class="suggestion">Jelaskan apa itu WebGPU</button>
-          <button class="suggestion">Tulis fungsi Python quicksort</button>
-          <button class="suggestion">Berikan 5 ide nama startup AI</button>
-        </div>
-      </div>`;
-    $$('.suggestion').forEach((b) => {
-      b.addEventListener('click', () => {
-        $('#chat-input').value = b.textContent;
-        $('#chat-input').focus();
-      });
-    });
+    const sub = state.runState !== 'running'
+      ? 'Click Run in the header to load the model first.'
+      : 'Type a message and press Cmd/Ctrl+Enter to send.';
+    container.innerHTML = `<div class="chat-empty"><p class="ce-sub">${sub}</p></div>`;
     return;
   }
 
   const USER_AVATAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
-  const AI_AVATAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
+  const AI_AVATAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>';
 
   let html = '';
   state.chatMessages.forEach((m) => {
@@ -1265,7 +1248,7 @@ function init() {
   $('#clear-benchmark-btn').addEventListener('click', () => {
     state.benchmarkResults = [];
     renderBenchmark();
-    log('Benchmark history dibersihkan.', 'info');
+    log('Benchmark cleared.', 'info');
   });
 
   // Initial render
@@ -1276,9 +1259,6 @@ function init() {
   renderChatMessages();
   renderChatInput();
   renderBenchmark();
-
-  // Welcome
-  log('SynapGPU ready. Drop files and click Run to begin.', 'info');
 
   // Refresh file list from server (in case there's stale state)
   refreshFiles();
