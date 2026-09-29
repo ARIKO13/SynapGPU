@@ -897,13 +897,12 @@ function renderMetrics() {
   }
 
   // RAM
-  const ramTotal = m.ram.totalGb || 1;
+  const ramTotal = m.ram.totalGb || 0;
   const ramPct = ramTotal > 0 ? (m.ram.usedGb / ramTotal) * 100 : 0;
   $('#ram-pct').textContent = ramPct.toFixed(0);
   $('#ram-used').textContent = m.ram.usedGb.toFixed(2);
-  // Display total: avoid double "GB" — displayTotal already includes "GB"
-  const ramTotalDisplay = m.ram.displayTotal || `${m.ram.totalGb} GB`;
-  $('#ram-total').textContent = ramTotalDisplay.replace(/\s*GB\s*$/, '');
+  // Display total: just show the number; the HTML template adds "GB"
+  $('#ram-total').textContent = ramTotal || '—';
   $('#ram-bar').style.width = `${ramPct}%`;
   const ramCard = $('#cpu-metrics-grid .metric-card[data-accent="amber"]');
   if (ramCard) applyAccentClass(ramCard, ramPct);
