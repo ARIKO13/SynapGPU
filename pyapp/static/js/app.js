@@ -1,4 +1,4 @@
-/* ColabGPU — vanilla JavaScript, no framework */
+/* SynapGPU — vanilla JavaScript, no framework */
 
 'use strict';
 
@@ -111,7 +111,7 @@ async function uploadFiles(fileList) {
   const files = Array.from(fileList);
   if (files.length === 0) return;
   $('#dropzone').classList.add('uploading');
-  log(`Mengunggah ${files.length} file: ${files.map((f) => f.name).join(', ')}`, 'info');
+  log(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}: ${files.map((f) => f.name).join(', ')}`, 'info');
   try {
     const formData = new FormData();
     files.forEach((f) => formData.append('files', f));
@@ -120,11 +120,11 @@ async function uploadFiles(fileList) {
     const data = await res.json();
     state.files = data.files;
     const totalBytes = data.created.reduce((a, f) => a + f.sizeBytes, 0);
-    log(`Berhasil upload ${data.created.length} file (${humanSize(totalBytes)}).`, 'success');
+    log(`Uploaded ${data.created.length} file${data.created.length > 1 ? 's' : ''} (${humanSize(totalBytes)}).`, 'success');
     renderFiles();
     renderRunState();
   } catch (e) {
-    log(`Gagal upload: ${e.message}`, 'error');
+    log(`Upload failed: ${e.message}`, 'error');
   } finally {
     $('#dropzone').classList.remove('uploading');
   }
@@ -339,12 +339,12 @@ function renderConnection() {
     cs.classList.add('online');
     $('#conn-text').textContent = 'connected';
     ft.classList.add('online');
-    ft.innerHTML = '<span class="dot"></span> telemetry live';
+    ft.innerHTML = '<span class="indicator-dot"></span> live';
   } else {
     cs.classList.remove('online');
     $('#conn-text').textContent = 'offline';
     ft.classList.remove('online');
-    ft.innerHTML = '<span class="dot"></span> telemetry offline';
+    ft.innerHTML = '<span class="indicator-dot"></span> offline';
   }
   // Dashboard visibility — show once we have either a metrics payload OR
   // a confirmed WebSocket connection (so the user immediately sees the
@@ -501,17 +501,17 @@ function renderRunState() {
   dot.className = 'status-dot';
   if (state.runState === 'running') {
     dot.classList.add('running');
-    txt.textContent = 'Model aktif — inference berjalan';
+    txt.textContent = 'Model active — inference running';
   } else if (state.runState === 'loading') {
     dot.classList.add('loading');
-    txt.textContent = 'Memuat model ke VRAM…';
+    txt.textContent = 'Loading model into VRAM…';
   } else if (state.runState === 'error') {
     dot.classList.add('error');
-    txt.textContent = 'Terjadi error';
+    txt.textContent = 'Error occurred';
   } else if (state.runState === 'stopped') {
-    txt.textContent = 'Run dihentikan';
+    txt.textContent = 'Run stopped';
   } else {
-    txt.textContent = 'Sistem idle';
+    txt.textContent = 'System idle';
   }
 
   // Model badge
@@ -548,8 +548,8 @@ function renderRunState() {
   const ceSub = $('#ce-sub');
   if (ceSub) {
     ceSub.textContent = state.runState !== 'running'
-      ? 'Klik tombol Run di header dulu untuk load model. Setelah status berubah "running", chat ini aktif.'
-      : 'Ketik pesan dan tekan Cmd/Ctrl+Enter atau klik tombol kirim. Response stream token-by-token.';
+      ? 'Click Run in the header to load the model first. Once status becomes "running", chat is active.'
+      : 'Type a message and press Cmd/Ctrl+Enter or click send. Response streams token-by-token.';
   }
 }
 
@@ -584,8 +584,8 @@ function renderFiles() {
     list.innerHTML = `
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-        <p class="empty-title">Belum ada file</p>
-        <p class="empty-sub">Drag & drop LLM, dataset, atau config</p>
+        <p class="empty-title">No files yet</p>
+        <p class="empty-sub">Drag & drop to begin</p>
       </div>`;
     summary.classList.add('hidden');
     clearBtn.classList.add('hidden');
@@ -649,7 +649,7 @@ function renderConsole() {
   const out = $('#console-output');
   $('#console-count').textContent = `${state.consoleLines.length} lines`;
   if (state.consoleLines.length === 0) {
-    out.innerHTML = '<div class="console-empty">Belum ada output. Drag & drop file lalu klik Run untuk mulai.</div>';
+    out.innerHTML = '<div class="console-empty">No output yet. Drop a file and click Run.</div>';
     return;
   }
   const LEVEL_ICON = { info: 'ℹ', warn: '⚠', error: '✗', success: '✓' };
@@ -726,10 +726,10 @@ function renderChatInput() {
 
   if (state.runState === 'running') {
     input.disabled = false;
-    input.placeholder = 'Ketik pesan… (Cmd/Ctrl+Enter untuk kirim)';
+    input.placeholder = 'Type a message… (Cmd/Ctrl+Enter to send)';
   } else {
     input.disabled = true;
-    input.placeholder = 'Run model dulu sebelum chat…';
+    input.placeholder = 'Run model first to chat…';
   }
 
   if (state.chatStreaming) {
@@ -979,7 +979,7 @@ function renderVerdict() {
   $('#verdict-tests-count').textContent = `${testsCount} test${testsCount === 1 ? '' : 's'}`;
 
   if (!v) {
-    $('#verdict-main').innerHTML = '<span class="dim">Belum ada data.</span>';
+    $('#verdict-main').innerHTML = '<span class="dim">No data yet.</span>';
     $('#verdict-detail').textContent = '';
     return;
   }
@@ -990,11 +990,11 @@ function renderVerdict() {
 
   let mainHtml;
   if (onPar) {
-    mainHtml = `Setara dengan <span class="highlight">${closest.name}</span> <span class="dim">(selisih ${Math.abs(closest.diff)} poin · ${userScore} vs ${closest.overall})</span>`;
+    mainHtml = `On par with <span class="highlight">${closest.name}</span> <span class="dim">(${Math.abs(closest.diff)} pts · ${userScore} vs ${closest.overall})</span>`;
   } else if (closest.diff > 0) {
-    mainHtml = `Mengalahkan <span class="highlight">${closest.name}</span> <span class="dim">(+${closest.diff} poin · ${userScore} vs ${closest.overall})</span>`;
+    mainHtml = `Beats <span class="highlight">${closest.name}</span> <span class="dim">(+${closest.diff} pts · ${userScore} vs ${closest.overall})</span>`;
   } else {
-    mainHtml = `Kalah tipis dari <span class="highlight">${closest.name}</span> <span class="dim">(${Math.abs(closest.diff)} poin · ${userScore} vs ${closest.overall})</span>`;
+    mainHtml = `Slightly below <span class="highlight">${closest.name}</span> <span class="dim">(${Math.abs(closest.diff)} pts · ${userScore} vs ${closest.overall})</span>`;
   }
   $('#verdict-main').innerHTML = mainHtml;
 
@@ -1003,14 +1003,14 @@ function renderVerdict() {
   if (v.beats.length > 0) {
     const list = v.beats.slice(0, 3).map((b) =>
       `<span class="pos">${b.name}</span> (+${b.diff})`).join(', ');
-    detail += `Mengalahkan ${v.beats.length} LLM: ${list}${v.beats.length > 3 ? '…' : ''}. `;
+    detail += `Beats ${v.beats.length} LLM: ${list}${v.beats.length > 3 ? '…' : ''}. `;
   }
   if (v.losesTo.length > 0) {
     const list = v.losesTo.slice(0, 3).map((b) =>
       `<span class="neg">${b.name}</span> (${b.diff})`).join(', ');
-    detail += `Kalah dari ${v.losesTo.length} LLM: ${list}${v.losesTo.length > 3 ? '…' : ''}.`;
+    detail += `Loses to ${v.losesTo.length} LLM: ${list}${v.losesTo.length > 3 ? '…' : ''}.`;
   }
-  if (!detail) detail = `User's LLM berada di posisi unik — tidak ada yang persis setara.`;
+  if (!detail) detail = `Your LLM is in a unique position — no exact match.`;
   $('#verdict-detail').innerHTML = detail;
 }
 
@@ -1155,7 +1155,7 @@ function renderBarChart() {
 function renderTestHistory() {
   const container = $('#test-history');
   if (state.benchmarkResults.length === 0) {
-    container.innerHTML = '<div class="th-empty">Belum ada tes.</div>';
+    container.innerHTML = '<div class="th-empty">No tests yet.</div>';
     return;
   }
   // Newest first.
@@ -1278,7 +1278,7 @@ function init() {
   renderBenchmark();
 
   // Welcome
-  log('ColabGPU siap. Drag & drop file LLM/dataset ke sidebar, lalu klik Run.', 'info');
+  log('SynapGPU ready. Drop files and click Run to begin.', 'info');
 
   // Refresh file list from server (in case there's stale state)
   refreshFiles();

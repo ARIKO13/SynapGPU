@@ -1,49 +1,43 @@
 <!DOCTYPE html>
-<html lang="id" class="dark">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ColabGPU — Drag · Drop · Run · Monitor</title>
-  <meta name="description" content="WebGPU-style notebook: drag & drop LLM/dataset, click Run, monitor GPU/RAM/SSD in real time, test your model." />
+  <title>SynapGPU — Drag · Drop · Run · Monitor</title>
+  <meta name="description" content="WebGPU-style notebook: drag & drop LLM/dataset, click Run, monitor GPU/RAM/SSD in real time, test and benchmark your model." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>⚡</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%2310b981'/></svg>" />
 </head>
 <body>
   <div class="app">
-    <!-- Header -->
     <header class="header">
       <div class="brand">
         <div class="logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-            <rect x="9" y="9" width="6" height="6"></rect>
-            <line x1="9" y1="1" x2="9" y2="4"></line>
-            <line x1="15" y1="1" x2="15" y2="4"></line>
-            <line x1="9" y1="20" x2="9" y2="23"></line>
-            <line x1="15" y1="20" x2="15" y2="23"></line>
-            <line x1="20" y1="9" x2="23" y2="9"></line>
-            <line x1="20" y1="14" x2="23" y2="14"></line>
-            <line x1="1" y1="9" x2="4" y2="9"></line>
-            <line x1="1" y1="14" x2="4" y2="14"></line>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="7" cy="12" r="2.5"/>
+            <circle cx="17" cy="7" r="2"/>
+            <circle cx="17" cy="17" r="2"/>
+            <path d="M9.5 11 L15 8"/>
+            <path d="M9.5 13 L15 16"/>
           </svg>
         </div>
         <div class="brand-text">
-          <div class="brand-name">ColabGPU <span class="version-badge">v0.1 · HTML/CSS/JS/Python</span></div>
+          <div class="brand-name">SynapGPU</div>
           <div class="brand-tag">Drag · Drop · Run · Monitor</div>
         </div>
       </div>
       <div class="header-right">
         <div id="model-badge" class="model-badge hidden">
-          <span class="dot pulse"></span>
-          <span class="label">model:</span>
+          <span class="indicator-dot pulse"></span>
+          <span class="label">model</span>
           <span id="active-model" class="model-name">—</span>
           <span class="sep">·</span>
           <span id="uptime" class="uptime">00:00:00</span>
         </div>
-        <div id="conn-status" class="conn-status offline">
+        <div id="conn-status" class="conn-pill offline">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-wifi">
             <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
             <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
@@ -63,15 +57,12 @@
       </div>
     </header>
 
-    <!-- Body: sidebar + main -->
     <div class="body">
       <aside class="sidebar">
         <div class="sidebar-header">
           <div class="sidebar-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-folder">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-            </svg>
-            <span>File Manager</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>Files</span>
           </div>
           <button id="clear-files-btn" class="btn-ghost hidden">Clear all</button>
         </div>
@@ -81,17 +72,17 @@
             <input id="file-input" type="file" multiple hidden />
             <div class="dropzone-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
             </div>
             <div class="dropzone-text">
-              <p class="dz-primary">Drag & drop file di sini</p>
-              <p class="dz-secondary">atau klik untuk pilih file · multi-file didukung</p>
+              <p class="dz-primary">Drop files here</p>
+              <p class="dz-secondary">or click to browse · multi-file</p>
             </div>
             <div class="dz-categories">
-              <div class="dz-cat"><span class="cat-label">LLM Model</span><span class="cat-ext">.gguf .bin .safetensors</span></div>
+              <div class="dz-cat"><span class="cat-label">LLM Model</span><span class="cat-ext">.gguf .safetensors .onnx</span></div>
               <div class="dz-cat"><span class="cat-label">Dataset</span><span class="cat-ext">.csv .jsonl .parquet</span></div>
               <div class="dz-cat"><span class="cat-label">Config</span><span class="cat-ext">.yaml .toml .json</span></div>
             </div>
@@ -100,8 +91,8 @@
         <div id="file-list" class="file-list">
           <div class="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-            <p class="empty-title">Belum ada file</p>
-            <p class="empty-sub">Drag & drop LLM, dataset, atau config</p>
+            <p class="empty-title">No files yet</p>
+            <p class="empty-sub">Drag & drop to begin</p>
           </div>
         </div>
       </aside>
@@ -131,13 +122,13 @@
         <section id="tab-dashboard" class="tab-panel active">
           <div id="dashboard-loading" class="dashboard-loading">
             <div class="spinner"></div>
-            <p>Menunggu koneksi telemetry…</p>
-            <p class="sub">Python Flask-SocketIO server harus aktif.</p>
+            <p>Connecting to telemetry stream…</p>
+            <p class="sub">python3 app.py · port 3000</p>
           </div>
           <div id="dashboard-content" class="dashboard-content hidden">
             <div class="status-bar">
               <span class="status-dot" id="status-dot"></span>
-              <span id="status-text">Sistem idle</span>
+              <span id="status-text" class="status-text">System idle</span>
               <span id="status-time" class="status-time"></span>
             </div>
             <div class="metric-grid">
@@ -148,7 +139,7 @@
                 </div>
                 <div class="metric-value"><span id="gpu-util">0.0</span>%</div>
                 <div class="metric-progress"><div id="gpu-util-bar" class="progress-bar"></div></div>
-                <div class="metric-footer">VRAM <span id="gpu-vram">0.0</span> / <span id="gpu-vram-total">24</span> GB</div>
+                <div class="metric-footer">VRAM <span id="gpu-vram">0.0</span>/<span id="gpu-vram-total">24</span> GB</div>
               </div>
               <div class="metric-card" data-accent="cyan">
                 <div class="metric-header">
@@ -177,7 +168,7 @@
                 <div class="metric-value"><span id="ssd-pct">0.0</span>%</div>
                 <div class="metric-sub"><span id="ssd-used">0</span>/<span id="ssd-total">1024</span> GB</div>
                 <div class="metric-progress"><div id="ssd-bar" class="progress-bar"></div></div>
-                <div class="metric-footer">R <span id="ssd-read">0</span> MB/s · W <span id="ssd-write">0</span> MB/s</div>
+                <div class="metric-footer">R <span id="ssd-read">0</span> · W <span id="ssd-write">0</span> MB/s</div>
               </div>
             </div>
             <div class="metric-grid secondary">
@@ -190,23 +181,23 @@
                 <span class="sm-value"><span id="gpu-power">25</span> W</span>
               </div>
               <div class="metric-card-sm" data-accent="cyan">
-                <span class="sm-label">Network RX</span>
+                <span class="sm-label">Net RX</span>
                 <span class="sm-value"><span id="net-rx">0.0</span> Mbps</span>
               </div>
               <div class="metric-card-sm" data-accent="cyan">
-                <span class="sm-label">Network TX</span>
+                <span class="sm-label">Net TX</span>
                 <span class="sm-value"><span id="net-tx">0.0</span> Mbps</span>
               </div>
             </div>
             <div class="chart-card">
               <div class="chart-header">
-                <span class="chart-title">GPU Utilization (60s)</span>
+                <span class="chart-title">GPU Utilization · 60s</span>
                 <span class="chart-avg"><span id="gpu-avg">0.0</span>% avg</span>
               </div>
               <svg id="gpu-chart" class="chart" viewBox="0 0 800 100" preserveAspectRatio="none"></svg>
               <div class="chart-footer">
-                <span>SSD Read: <span id="ssd-read-2">0</span> MB/s</span>
-                <span>SSD Write: <span id="ssd-write-2">0</span> MB/s</span>
+                <span>SSD Read <span id="ssd-read-2">0</span> MB/s</span>
+                <span>SSD Write <span id="ssd-write-2">0</span> MB/s</span>
               </div>
               <svg id="ssd-chart" class="chart small" viewBox="0 0 800 50" preserveAspectRatio="none"></svg>
             </div>
@@ -217,21 +208,21 @@
           <div class="console-header">
             <div class="ch-left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-              <span>Console Output</span>
+              <span>Console</span>
               <span id="console-count" class="console-count">0 lines</span>
             </div>
             <button id="clear-console-btn" class="btn-ghost">Clear</button>
           </div>
           <div id="console-output" class="console-output">
-            <div class="console-empty">Belum ada output. Drag & drop file lalu klik Run untuk mulai.</div>
+            <div class="console-empty">No output yet. Drop a file and click Run.</div>
           </div>
         </section>
 
         <section id="tab-chat" class="tab-panel">
           <div class="chat-header">
             <div class="ch-left">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-              <span>LLM Test Console</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>LLM Test</span>
               <span id="chat-model-badge" class="chat-model-badge hidden">—</span>
             </div>
             <button id="clear-chat-btn" class="btn-ghost">Clear</button>
@@ -239,10 +230,10 @@
           <div id="chat-messages" class="chat-messages">
             <div class="chat-empty">
               <div class="chat-empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               </div>
-              <p class="ce-title">Test LLM yang sudah di-load</p>
-              <p id="ce-sub" class="ce-sub">Klik tombol Run di header dulu untuk load model.</p>
+              <p class="ce-title">Test your loaded LLM</p>
+              <p id="ce-sub" class="ce-sub">Click Run in the header to load the model first.</p>
               <div class="ce-suggestions">
                 <button class="suggestion">Jelaskan apa itu WebGPU</button>
                 <button class="suggestion">Tulis fungsi Python quicksort</button>
@@ -252,7 +243,7 @@
           </div>
           <div id="chat-error" class="chat-error hidden"></div>
           <div class="chat-input-bar">
-            <textarea id="chat-input" placeholder="Run model dulu sebelum chat…" rows="2" disabled></textarea>
+            <textarea id="chat-input" placeholder="Run model first to chat…" rows="2" disabled></textarea>
             <button id="chat-send-btn" class="btn btn-primary btn-icon" disabled>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
@@ -260,7 +251,7 @@
               <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"></rect></svg>
             </button>
           </div>
-          <p class="chat-footer-note">Powered by Python Flask + httpx → ZAI API · Streaming token-by-token</p>
+          <p class="chat-footer-note">Streaming via Flask + httpx → ZAI API · token-by-token</p>
         </section>
 
         <section id="tab-benchmark" class="tab-panel">
@@ -268,11 +259,10 @@
             <div class="benchmark-empty-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
             </div>
-            <p class="be-title">Belum ada data benchmark</p>
-            <p class="be-sub">Pergi ke tab <strong>Test LLM</strong>, kirim beberapa prompt, lalu kembali ke sini. Setiap response otomatis di-analyze di 6 dimensi: reasoning, code, math, knowledge, speed, coherence.</p>
+            <p class="be-title">No benchmark data yet</p>
+            <p class="be-sub">Go to <strong>Test LLM</strong>, send prompts, then return. Each response is auto-analyzed across 6 dimensions and compared to real-world LLMs.</p>
           </div>
           <div id="benchmark-content" class="benchmark-content hidden">
-            <!-- Verdict -->
             <div class="verdict-card">
               <div class="verdict-header">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
@@ -283,39 +273,36 @@
               <div id="verdict-detail" class="verdict-detail"></div>
             </div>
 
-            <!-- Radar Charts -->
             <div class="benchmark-grid two-col">
               <div class="benchmark-card">
                 <div class="bc-header">
                   <span class="bc-title">Capability Profile</span>
-                  <span class="bc-subtitle">User's LLM — 6 dimensi</span>
+                  <span class="bc-subtitle">6 dimensions</span>
                 </div>
                 <svg id="radar-user" class="radar-chart" viewBox="0 0 320 280"></svg>
                 <div class="radar-legend">
-                  <span class="legend-item"><span class="dot emerald"></span> User's LLM</span>
-                  <span class="legend-item"><span class="dot zinc"></span> Comparison: <span id="radar-compare-name">—</span></span>
+                  <span class="legend-item"><span class="dot emerald"></span> Your LLM</span>
+                  <span class="legend-item"><span class="dot zinc"></span> <span id="radar-compare-name">—</span></span>
                 </div>
                 <select id="radar-compare-select" class="bc-select"></select>
               </div>
               <div class="benchmark-card">
                 <div class="bc-header">
                   <span class="bc-title">Dimension Scores</span>
-                  <span class="bc-subtitle">Detail per-dimensi</span>
+                  <span class="bc-subtitle">Detail</span>
                 </div>
                 <div id="dim-scores" class="dim-scores"></div>
               </div>
             </div>
 
-            <!-- Bar Chart Comparison -->
             <div class="benchmark-card">
               <div class="bc-header">
                 <span class="bc-title">Overall Score Comparison</span>
-                <span class="bc-subtitle">User's LLM vs LLM publik (MMLU/HumanEval/GSM8K avg)</span>
+                <span class="bc-subtitle">vs public LLMs</span>
               </div>
               <svg id="bar-chart" class="bar-chart" viewBox="0 0 700 320"></svg>
             </div>
 
-            <!-- Test History -->
             <div class="benchmark-card">
               <div class="bc-header">
                 <span class="bc-title">Test History</span>
@@ -330,11 +317,11 @@
 
     <footer class="footer">
       <div class="footer-left">
-        <span id="footer-conn" class="footer-item"><span class="dot"></span> telemetry offline</span>
+        <span id="footer-conn" class="footer-item"><span class="indicator-dot"></span> offline</span>
         <span class="sep">·</span>
         <span id="footer-run" class="footer-item">idle</span>
         <span class="sep">·</span>
-        <span class="footer-item"><span id="footer-files">0</span> files staged</span>
+        <span class="footer-item"><span id="footer-files">0</span> files</span>
       </div>
       <div class="footer-right">
         <span class="footer-item">GPU <span id="footer-gpu">0</span>%</span>
@@ -344,7 +331,6 @@
     </footer>
   </div>
 
-  <!-- Socket.IO client (local copy v4.8.1 to match python-socketio 5.x) -->
   <script src="/static/js/socket.io.min.js"></script>
   <script src="/static/js/app.js"></script>
 </body>

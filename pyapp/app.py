@@ -1,5 +1,5 @@
 """
-ColabGPU — Flask backend
+SynapGPU — Flask backend
 ========================
 Single-process Python server that:
   • Serves the static frontend (HTML/CSS/JS) on `/`
@@ -576,7 +576,7 @@ def metrics_broadcaster():
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     print("=" * 60)
-    print("  ColabGPU — Flask backend")
+    print("  SynapGPU — Flask backend")
     print(f"  ZAI base URL: {ZAI_BASE_URL}")
     print(f"  ZAI API key: {'set' if ZAI_API_KEY else 'MISSING'}")
     print(f"  Upload dir:  {UPLOAD_DIR}")
