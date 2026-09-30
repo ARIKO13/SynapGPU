@@ -1269,6 +1269,100 @@ html, body {
   display: none;
 }
 
+/* WebGPU LLM loader */
+.llm-loader {
+  padding: 0.75rem;
+  background: var(--bg-elev-1);
+  border-bottom: 1px solid var(--border);
+}
+.llm-loader-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.llm-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.llm-select {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  outline: none;
+  font-family: var(--font-sans);
+}
+.llm-select:focus { border-color: var(--accent-border); }
+.llm-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.load-progress {
+  margin-top: 0.625rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.load-progress.hidden { display: none; }
+.lp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.lp-text {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  margin-right: 0.5rem;
+}
+.lp-percent {
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.lp-bar-bg {
+  height: 4px;
+  background: var(--bg-elev-2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.lp-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+#load-model-btn {
+  height: 32px;
+  padding: 0 0.75rem;
+  white-space: nowrap;
+}
+#load-model-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+#load-model-btn .icon-loading {
+  display: none;
+}
+#load-model-btn.loading .icon-loading {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+#load-model-btn.loading svg:not(.icon-loading) {
+  display: none;
+}
+
 /* ============================================================
    Benchmark
    ============================================================ */
