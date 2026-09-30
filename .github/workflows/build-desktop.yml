@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -19,35 +22,51 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
+        working-directory: desktop
         run: |
-          cd desktop
           pip install -r requirements.txt
 
       - name: Build EXE
+        working-directory: desktop
         run: |
-          cd desktop
           pyinstaller SynapGPU.spec --noconfirm --clean
 
-      - name: Rename folder
+      - name: Create zip
         run: |
-          Move-Item desktop\dist\SynapGPU desktop\dist\SynapGPU-Windows
+          Compress-Archive -Path desktop\dist\SynapGPU\* -DestinationPath SynapGPU-Windows.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SynapGPU-Windows
-          path: desktop/dist/SynapGPU-Windows/
+          path: desktop/dist/SynapGPU/
           retention-days: 90
-
-      - name: Create zip for release
-        run: |
-          Compress-Archive -Path desktop\dist\SynapGPU-Windows\* -DestinationPath desktop\dist\SynapGPU-Windows.zip
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: desktop/dist/SynapGPU-Windows.zip
-          generate_release_notes: true
+          files: SynapGPU-Windows.zip
+          name: SynapGPU ${{ github.ref_name }}
+          body: |
+            ## SynapGPU Desktop v${{ github.ref_name }}
+
+            ### Download
+            - **SynapGPU-Windows.zip** — extract and run SynapGPU.exe
+            - No Python installation needed — everything is bundled
+
+            ### Requirements
+            - Windows 10 or later
+            - For GPU monitoring: NVIDIA drivers (nvidia-smi) or AMD ROCm
+            - For LLM chat: Ollama, llama.cpp, or LM Studio (optional)
+
+            ### Features
+            - Real device profiling (CPU model, RAM, GPU, VRAM)
+            - Live metrics (CPU/RAM/SSD/GPU utilization, temperature, power)
+            - LLM benchmark comparison (live data from HuggingFace Leaderboard)
+            - Test your local LLM and compare against GPT-4, Claude, Llama, etc.
+          generate_release_notes: false
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
