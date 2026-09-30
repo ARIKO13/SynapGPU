@@ -283,11 +283,11 @@
             <button id="clear-chat-btn" class="btn-ghost">Clear</button>
           </div>
 
-          <!-- WebGPU model loader -->
+          <!-- LLM model loader -->
           <div class="llm-loader">
             <div class="llm-tabs">
               <button class="llm-tab active" data-mode="preset">Preset Models</button>
-              <button class="llm-tab" data-mode="custom">Upload .gguf</button>
+              <button class="llm-tab" data-mode="custom">Your Files</button>
             </div>
 
             <!-- Preset mode: pick from pre-built models -->
@@ -309,16 +309,10 @@
               </div>
             </div>
 
-            <!-- Custom mode: upload any .gguf file -->
+            <!-- Custom mode: use .gguf files from sidebar -->
             <div id="llm-custom" class="llm-mode hidden">
-              <div class="custom-upload-area" id="custom-dropzone">
-                <input type="file" id="custom-file-input" accept=".gguf,.bin,.safetensors,.onnx" hidden />
-                <div class="custom-drop-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </div>
-                <p class="custom-drop-text">Drop your .gguf file here</p>
-                <p class="custom-drop-sub">or click to browse · any GGUF model works</p>
-                <p class="custom-drop-hint">Runs via wllama (WebAssembly llama.cpp) — your custom trained LLM, fine-tuned model, or any quantized GGUF</p>
+              <div id="custom-file-list" class="custom-file-list">
+                <!-- .gguf files from sidebar appear here -->
               </div>
             </div>
 

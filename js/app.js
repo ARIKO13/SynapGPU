@@ -563,6 +563,7 @@ function uploadFiles(fileList) {
       humanSize: humanSize(f.size),
       category,
       uploadedAt: Date.now(),
+      _file: f, // keep reference to File object for wllama loading
     });
     addedCount++;
     addedBytes += f.size;
@@ -570,6 +571,7 @@ function uploadFiles(fileList) {
   log(`Uploaded ${addedCount} file${addedCount > 1 ? 's' : ''} (${humanSize(addedBytes)}).`, 'success');
   renderFiles();
   renderRunState();
+  renderCustomFileList();
 }
 
 function deleteFile(id) {
@@ -577,6 +579,7 @@ function deleteFile(id) {
   log(`File deleted.`, 'info');
   renderFiles();
   renderRunState();
+  renderCustomFileList();
 }
 
 function clearAllFiles() {
@@ -584,6 +587,7 @@ function clearAllFiles() {
   log('All files cleared.', 'info');
   renderFiles();
   renderRunState();
+  renderCustomFileList();
 }
 
 function refreshFiles() { /* no-op on web version */ }
@@ -645,7 +649,47 @@ function setLlmMode(mode) {
   $('#llm-custom').classList.toggle('hidden', mode !== 'custom');
 }
 
-// --- Custom .gguf file loading via wllama ---
+// --- Custom .gguf loading via wllama (files come from sidebar upload) ---
+function renderCustomFileList() {
+  const container = $('#custom-file-list');
+  if (!container) return;
+  const llmFiles = state.files.filter((f) => f.category === 'llm');
+  if (llmFiles.length === 0) {
+    container.innerHTML = '<div class="custom-file-empty">No .gguf files uploaded. Drop a .gguf file in the sidebar to load it here.</div>';
+    return;
+  }
+  let html = '';
+  llmFiles.forEach((f) => {
+    const time = new Date(f.uploadedAt).toLocaleTimeString('en-US', { hour12: false });
+    html += `
+      <div class="custom-file-row" data-id="${f.id}">
+        <span class="custom-file-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+        </span>
+        <div class="custom-file-info">
+          <div class="custom-file-name">${escapeHtml(f.name)}</div>
+          <div class="custom-file-meta">${f.humanSize} · uploaded ${time}</div>
+        </div>
+        <span class="custom-file-load">Load →</span>
+      </div>`;
+  });
+  container.innerHTML = html;
+  // Attach click handlers
+  container.querySelectorAll('.custom-file-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const fileId = row.dataset.id;
+      const file = state.files.find((f) => f.id === fileId);
+      if (file && file._file) {
+        loadCustomGguf(file._file);
+      } else {
+        $('#chat-error').textContent = 'File not available. Please re-upload the .gguf file via the sidebar dropzone.';
+        $('#chat-error').classList.remove('hidden');
+        log('File ' + file.name + ' is a placeholder — re-upload to load.', 'warn');
+      }
+    });
+  });
+}
+
 async function loadCustomGguf(file) {
   const progressEl = $('#load-progress');
   const lpText = $('#lp-text');
@@ -1845,24 +1889,6 @@ async function init() {
 
   // LLM mode tabs
   $$('.llm-tab').forEach((t) => t.addEventListener('click', () => setLlmMode(t.dataset.mode)));
-
-  // Custom .gguf upload
-  const customDz = $('#custom-dropzone');
-  const customInput = $('#custom-file-input');
-  customDz.addEventListener('click', () => customInput.click());
-  customInput.addEventListener('change', () => {
-    if (customInput.files.length) loadCustomGguf(customInput.files[0]);
-    customInput.value = '';
-  });
-  ['dragenter', 'dragover'].forEach((evt) => {
-    customDz.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); customDz.classList.add('drag-over'); });
-  });
-  ['dragleave', 'drop'].forEach((evt) => {
-    customDz.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); customDz.classList.remove('drag-over'); });
-  });
-  customDz.addEventListener('drop', (e) => {
-    if (e.dataTransfer.files?.length) loadCustomGguf(e.dataTransfer.files[0]);
-  });
   $('#radar-compare-select').addEventListener('change', (e) => {
     state.radarCompareKey = e.target.value;
     renderRadarChart();
@@ -1880,6 +1906,7 @@ async function init() {
   renderChatMessages();
   renderChatInput();
   renderBenchmark();
+  renderCustomFileList();
   renderDeviceInfo();
 }
 
