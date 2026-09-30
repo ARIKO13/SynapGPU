@@ -35,13 +35,14 @@ import llm_fetch
 # Configuration
 # ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
-# When running as a PyInstaller bundle, the static folder is at:
-#   sys._MEIPASS/static (one-file) or  BASE_DIR/static (one-dir)
-if hasattr(sys, "_MEIPASS") if False else False:  # type: ignore
-    pass  # placeholder — PyInstaller sets sys._MEIPASS automatically
-STATIC_DIR = BASE_DIR / "static" if (BASE_DIR / "static").exists() else Path(os.environ.get("SYNAPGPU_STATIC", "static"))
+# When running as a PyInstaller bundle, static files are at sys._MEIPASS/static
+# When running from source, they're at BASE_DIR/static
+if hasattr(sys, '_MEIPASS'):
+    STATIC_DIR = Path(sys._MEIPASS) / "static"
+else:
+    STATIC_DIR = BASE_DIR / "static"
 
-UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR = Path(os.environ.get("SYNAPGPU_UPLOADS", str(Path.home() / ".synapgpu" / "uploads")))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # ZAI SDK config (optional — for LLM chat fallback if no local inference server)
@@ -777,6 +778,19 @@ if __name__ == "__main__":
     print(f"  Listening:   http://localhost:3000")
     print("=" * 60)
     print("Press Ctrl+C to stop.")
+
+    # Auto-open browser after 1.5s (so server is ready first)
+    def open_browser():
+        import time as _t
+        _t.sleep(1.5)
+        url = "http://localhost:3000"
+        try:
+            import webbrowser
+            webbrowser.open(url)
+            print(f"  Browser opened: {url}")
+        except Exception:
+            print(f"  Open manually: {url}")
+    threading.Thread(target=open_browser, daemon=True).start()
 
     threading.Thread(target=metrics_broadcaster, daemon=True).start()
     # Bind to 0.0.0.0 so external tools (Caddy gateway, other hosts) can reach it.
