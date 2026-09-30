@@ -663,8 +663,18 @@ function renderCustomFileList() {
   let html = '';
   llmFiles.forEach((f) => {
     const time = new Date(f.uploadedAt).toLocaleTimeString('en-US', { hour12: false });
+    // Size-based warning tag
+    let sizeTag = '';
+    let sizeTagClass = '';
+    if (f.sizeBytes <= 500000000) { sizeTag = 'Fast'; sizeTagClass = 'ok'; }
+    else if (f.sizeBytes <= 1000000000) { sizeTag = 'Slow'; sizeTagClass = 'warn'; }
+    else if (f.sizeBytes <= 2000000000) { sizeTag = 'May crash'; sizeTagClass = 'warn'; }
+    else { sizeTag = 'Too large — use Desktop'; sizeTagClass = 'bad'; }
+
+    const loadDisabled = f.sizeBytes > 2000000000;
+
     html += `
-      <div class="custom-file-row" data-id="${f.id}">
+      <div class="custom-file-row ${loadDisabled ? 'disabled' : ''}" data-id="${f.id}">
         <span class="custom-file-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
         </span>
@@ -672,13 +682,15 @@ function renderCustomFileList() {
           <div class="custom-file-name">${escapeHtml(f.name)}</div>
           <div class="custom-file-meta">${f.humanSize} · uploaded ${time}</div>
         </div>
-        <span class="custom-file-load">Load →</span>
+        <span class="csi-tag ${sizeTagClass}">${sizeTag}</span>
+        ${loadDisabled ? '' : '<span class="custom-file-load">Load →</span>'}
       </div>`;
   });
   container.innerHTML = html;
   // Attach click handlers
   container.querySelectorAll('.custom-file-row').forEach((row) => {
     row.addEventListener('click', () => {
+      if (row.classList.contains('disabled')) return;
       const fileId = row.dataset.id;
       const file = state.files.find((f) => f.id === fileId);
       if (file && file._file) {

@@ -314,6 +314,26 @@
               <div id="custom-file-list" class="custom-file-list">
                 <!-- .gguf files from sidebar appear here -->
               </div>
+              <div class="custom-spec-info">
+                <div class="csi-header">Browser LLM Limits</div>
+                <div class="csi-row">
+                  <span class="csi-label">Up to 500MB</span>
+                  <span class="csi-tag ok">Fast (WebGPU)</span>
+                </div>
+                <div class="csi-row">
+                  <span class="csi-label">500MB – 1GB</span>
+                  <span class="csi-tag warn">Slow</span>
+                </div>
+                <div class="csi-row">
+                  <span class="csi-label">1GB – 2GB</span>
+                  <span class="csi-tag warn">May crash</span>
+                </div>
+                <div class="csi-row">
+                  <span class="csi-label">Above 2GB</span>
+                  <span class="csi-tag bad">Use Desktop →</span>
+                </div>
+                <p class="csi-note">Browser limits WASM memory to ~2-4GB. For large models, download the Desktop app — it has full OS RAM access via nvidia-smi / Ollama.</p>
+              </div>
             </div>
 
             <div id="load-progress" class="load-progress hidden">
@@ -414,6 +434,6 @@
     </footer>
   </div>
 
-  <script src="js/app.js?v=20260930k"></script>
+  <script src="js/app.js?v=20260930L"></script>
 </body>
 </html>

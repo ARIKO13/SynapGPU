@@ -1440,6 +1440,14 @@ html, body {
   border-color: var(--accent-border);
   background: var(--accent-soft);
 }
+.custom-file-row.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.custom-file-row.disabled:hover {
+  border-color: var(--border);
+  background: var(--bg-elev-2);
+}
 .custom-file-icon {
   width: 28px;
   height: 28px;
@@ -1476,6 +1484,71 @@ html, body {
   background: var(--accent-soft);
   border: 1px solid var(--accent-border);
   white-space: nowrap;
+}
+
+/* Browser LLM spec limits */
+.custom-spec-info {
+  margin-top: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.csi-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+.csi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+.csi-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.csi-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.csi-tag.ok {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-border);
+}
+.csi-tag.warn {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warn);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.csi-tag.bad {
+  background: rgba(244, 63, 94, 0.1);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+.csi-note {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 0.5rem;
+  line-height: 1.5;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-faint);
+}
+.csi-note a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+.csi-note a:hover {
+  text-decoration: underline;
 }
 
 /* ============================================================
