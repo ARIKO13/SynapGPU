@@ -725,11 +725,10 @@ async function loadCustomGguf(file) {
     }
     log('wllama v3.6.1 loaded.', 'success');
 
-    // wllama needs paths to wasm files
+    // wllama v3 pathConfig needs a 'default' key pointing to the wasm file
+    const WASM_URL = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.6.1/esm/wasm/wllama.wasm';
     const CONFIG_PATHS = {
-      'wllama.wasm': WLLAMA_CDN + '/wasm/single-thread/wllama.wasm',
-      'single-thread/wllama.wasm': WLLAMA_CDN + '/wasm/single-thread/wllama.wasm',
-      'multi-thread/wllama.wasm': WLLAMA_CDN + '/wasm/multi-thread/wllama.wasm',
+      'default': WASM_URL,
     };
 
     lpText.textContent = 'Initializing wllama…';
