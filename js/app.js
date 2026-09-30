@@ -712,16 +712,21 @@ async function loadCustomGguf(file) {
   lpBar.style.width = '0%';
 
   try {
-    // Dynamically import wllama from CDN
-    const wllamaModule = await import('https://esm.run/wllama');
-    const Wllama = wllamaModule.default || wllamaModule.Wllama;
+    // Dynamically import wllama from jsdelivr CDN (more reliable than esm.run)
+    const wllamaModule = await import('https://cdn.jsdelivr.net/npm/wllama@2.2.1/esm/index.js');
+    const Wllama = wllamaModule.Wllama || wllamaModule.default;
 
-    // wllama needs the wasm binary — configure with CDN paths
+    if (!Wllama) {
+      throw new Error('Wllama class not found in module. Exports: ' + Object.keys(wllamaModule).join(', '));
+    }
+
+    // wllama needs the wasm binary paths — use same CDN
+    const CDN = 'https://cdn.jsdelivr.net/npm/wllama@2.2.1/esm';
     const CONFIG_PATHS = {
-      'wllama.wasm': 'https://cdn.jsdelivr.net/npm/wllama/esm/wllama.wasm',
-      'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/wllama/esm/single-thread/wllama.wasm',
-      'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/wllama/esm/multi-thread/wllama.wasm',
-      'multi-thread/wllama.worker.mjs': 'https://cdn.jsdelivr.net/npm/wllama/esm/multi-thread/wllama.worker.mjs',
+      'wllama.wasm': CDN + '/wllama.wasm',
+      'single-thread/wllama.wasm': CDN + '/single-thread/wllama.wasm',
+      'multi-thread/wllama.wasm': CDN + '/multi-thread/wllama.wasm',
+      'multi-thread/wllama.worker.mjs': CDN + '/multi-thread/wllama.worker.mjs',
     };
 
     lpText.textContent = 'Initializing wllama…';
@@ -738,11 +743,10 @@ async function loadCustomGguf(file) {
     lpText.textContent = 'Loading ' + file.name + ' (' + humanSize(file.size) + ')…';
     log('Loading custom model: ' + file.name + ' (' + humanSize(file.size) + ')', 'info');
 
-    // Load the .gguf file from the File object
-    await wllamaInstance.loadFromBinary(file, {
-      n_ctx: 4096,       // context length
+    // wllama's loadModel accepts File objects directly
+    await wllamaInstance.loadModel(file, {
+      n_ctx: 4096,
       n_threads: navigator.hardwareConcurrency || 4,
-      // wllama auto-detects quantization from the gguf metadata
     });
 
     activeModelId = file.name;
@@ -902,21 +906,35 @@ async function sendMessage() {
 
     if (wllamaInstance) {
       // --- Custom .gguf via wllama ---
-      // wllama uses llama.cpp chat format — build prompt from messages
-      const prompt = wllamaInstance.formatChat(history, { system: SYSTEM_PROMPT });
+      // Build a simple prompt from chat history
+      let prompt = '';
+      history.forEach((m) => {
+        if (m.role === 'user') prompt += 'User: ' + m.content + '\n';
+        else if (m.role === 'assistant') prompt += 'Assistant: ' + m.content + '\n';
+      });
+      prompt += 'Assistant: ';
+
+      // wllama createCompletion with streaming
       const result = await wllamaInstance.createCompletion(prompt, {
         nPredict: 512,
         temperature: 0.7,
-        streaming: true,
       });
 
-      // wllama streaming: we get an async iterator of text chunks
-      for await (const chunk of result) {
-        const token = chunk || '';
-        if (token) {
-          const msg = state.chatMessages.find((m) => m.id === assistantId);
-          if (msg) msg.content += token;
-          renderChatMessages();
+      // wllama returns the full text (non-streaming) — append it all at once
+      // For streaming, wllama returns an async generator
+      if (result && typeof result === 'string') {
+        const msg = state.chatMessages.find((m) => m.id === assistantId);
+        if (msg) msg.content = result;
+        renderChatMessages();
+      } else if (result && typeof result[Symbol.asyncIterator] === 'function') {
+        // Streaming mode — async generator
+        for await (const chunk of result) {
+          const token = chunk || '';
+          if (token) {
+            const msg = state.chatMessages.find((m) => m.id === assistantId);
+            if (msg) msg.content += token;
+            renderChatMessages();
+          }
         }
       }
     } else if (webllmEngine) {
