@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.log
+*.pid
+uploads/*
+!uploads/.gitkeep
+.env
+.z-ai-config
+build/
+dist/
+*.spec.bak
