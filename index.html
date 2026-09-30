@@ -25,8 +25,8 @@
           </svg>
         </div>
         <div class="brand-text">
-          <div class="brand-name">SynapGPU <span class="demo-badge">DEMO</span></div>
-          <div class="brand-tag">Drag · Drop · Run · Monitor</div>
+          <div class="brand-name">SynapGPU</div>
+          <div class="brand-tag">WebGPU LLM · Device Profiler · Benchmark</div>
         </div>
       </div>
       <div class="header-right">
@@ -129,12 +129,6 @@
             <p>Connecting…</p>
           </div>
           <div id="dashboard-content" class="dashboard-content hidden">
-            <div class="demo-banner">
-              <span class="demo-banner-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              </span>
-              <span><strong>YOUR DEVICE</strong> — Specs shown below are read from <em>your</em> device via Web APIs (WebGPU, hardwareConcurrency, deviceMemory, storage.estimate). To use the full app with real LLM chat &amp; file uploads, <a href="https://github.com/ARIKO13/SynapGPU#quickstart" target="_blank" rel="noopener">deploy the Python backend</a>.</span>
-            </div>
             <div class="status-bar">
               <span class="status-dot" id="status-dot"></span>
               <span id="status-text" class="status-text">System idle</span>
@@ -339,7 +333,7 @@
 
           <div id="chat-messages" class="chat-messages">
             <div class="chat-empty">
-              <p id="ce-sub" class="ce-sub">Click "Load via WebGPU" above to download a small LLM (~250MB-1GB) and run it directly in your browser using WebGPU compute.</p>
+              <p id="ce-sub" class="ce-sub">Pick a preset model or upload your own .gguf file, then click Load to run an LLM directly in your browser via WebGPU.</p>
             </div>
           </div>
           <div id="chat-error" class="chat-error hidden"></div>
@@ -352,12 +346,12 @@
               <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"></rect></svg>
             </button>
           </div>
-          <p class="chat-footer-note">Runs entirely in your browser — no backend, no API key. Model is cached for next visit.</p>
+          <p class="chat-footer-note">Runs entirely in your browser — LLM inference via WebGPU or WebAssembly. No backend, no API key. Model cached for next visit.</p>
         </section>
 
         <section id="tab-benchmark" class="tab-panel">
           <div id="benchmark-empty" class="benchmark-empty">
-            <p class="be-sub">Send prompts in <strong>Test LLM</strong> to analyze. Each response is scored across 6 dimensions and compared to public LLMs.</p>
+            <p class="be-sub">Send prompts in <strong>Test LLM</strong> to analyze your model's responses and compare against public LLMs (GPT-4, Claude, Llama, etc).</p>
           </div>
           <div id="benchmark-content" class="benchmark-content hidden">
             <div class="verdict-card">

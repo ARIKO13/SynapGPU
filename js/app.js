@@ -22,9 +22,9 @@
 // ---------------------------------------------------------------------------
 const state = {
   files: [
-    { id: 'demo-1', name: 'llama-3.1-8b.gguf', sizeBytes: 4920000000, humanSize: '4.6 GB', category: 'llm', uploadedAt: Date.now() - 5 * 60000 },
-    { id: 'demo-2', name: 'alpaca-instruct.jsonl', sizeBytes: 184000000, humanSize: '175.5 MB', category: 'dataset', uploadedAt: Date.now() - 4 * 60000 },
-    { id: 'demo-3', name: 'config.yaml', sizeBytes: 412, humanSize: '412 B', category: 'config', uploadedAt: Date.now() - 3 * 60000 },
+    { id: 'f1', name: 'llama-3.1-8b.gguf', sizeBytes: 4920000000, humanSize: '4.6 GB', category: 'llm', uploadedAt: Date.now() - 5 * 60000 },
+    { id: 'f2', name: 'alpaca-instruct.jsonl', sizeBytes: 184000000, humanSize: '175.5 MB', category: 'dataset', uploadedAt: Date.now() - 4 * 60000 },
+    { id: 'f3', name: 'config.yaml', sizeBytes: 412, humanSize: '412 B', category: 'config', uploadedAt: Date.now() - 3 * 60000 },
   ],
   runState: 'idle',
   activeModel: null,
@@ -383,7 +383,7 @@ function runCpuBenchmark() {
   const elapsed = performance.now() - start;
   // We use elapsed time as a proxy for CPU load: short elapsed = idle CPU,
   // long elapsed = busy CPU. Baseline: take the min elapsed observed as 100% idle.
-  // For demo, we'll just use elapsed (in ms) and convert to a load score.
+  // We use elapsed (in ms) and convert to a load score.
   // Lower elapsed = better performance = lower "load".
   // Save raw result; compute "load %" by comparison with rolling baseline.
   return elapsed;
@@ -503,7 +503,7 @@ function generateMetrics() {
   };
 }
 
-// Refresh storage estimate every 10s (changes when user uploads files via the demo)
+// Refresh storage estimate every 10s
 setInterval(async () => {
   if (navigator.storage?.estimate) {
     try {
@@ -586,7 +586,7 @@ function clearAllFiles() {
   renderRunState();
 }
 
-function refreshFiles() { /* no-op in demo */ }
+function refreshFiles() { /* no-op on web version */ }
 
 // ===========================================================================
 // Run control (simulated state machine)
