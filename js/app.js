@@ -930,7 +930,7 @@ async function sendMessage() {
 
     if (wllamaInstance) {
       // --- Custom .gguf via wllama ---
-      // Build a simple prompt from chat history
+      // wllama v3 API: createCompletion takes ONE options object with prompt inside
       let prompt = '';
       history.forEach((m) => {
         if (m.role === 'user') prompt += 'User: ' + m.content + '\n';
@@ -938,29 +938,18 @@ async function sendMessage() {
       });
       prompt += 'Assistant: ';
 
-      // wllama createCompletion with streaming
-      const result = await wllamaInstance.createCompletion(prompt, {
-        nPredict: 512,
+      const result = await wllamaInstance.createCompletion({
+        prompt: prompt,
+        nPredict: 256,
         temperature: 0.7,
+        stream: false,
       });
 
-      // wllama returns the full text (non-streaming) — append it all at once
-      // For streaming, wllama returns an async generator
-      if (result && typeof result === 'string') {
-        const msg = state.chatMessages.find((m) => m.id === assistantId);
-        if (msg) msg.content = result;
-        renderChatMessages();
-      } else if (result && typeof result[Symbol.asyncIterator] === 'function') {
-        // Streaming mode — async generator
-        for await (const chunk of result) {
-          const token = chunk || '';
-          if (token) {
-            const msg = state.chatMessages.find((m) => m.id === assistantId);
-            if (msg) msg.content += token;
-            renderChatMessages();
-          }
-        }
-      }
+      // wllama returns { text: "..." } when stream=false
+      const responseText = (typeof result === 'string') ? result : (result?.text || result?.content || String(result));
+      const msg = state.chatMessages.find((m) => m.id === assistantId);
+      if (msg) msg.content = responseText;
+      renderChatMessages();
     } else if (webllmEngine) {
       // --- Preset model via web-llm ---
       const messages = [
