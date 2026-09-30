@@ -484,6 +484,13 @@ html, body {
   color: var(--text-faint);
 }
 .file-group-header .count { color: var(--text-trace); }
+.file-group-platforms {
+  font-size: 9px;
+  color: var(--text-faint);
+  padding: 0 2px;
+  margin-bottom: 0.25rem;
+  letter-spacing: 0.02em;
+}
 
 .file-row {
   display: flex;
@@ -525,6 +532,11 @@ html, body {
 .file-icon.other {
   background: var(--bg-elev-2);
   color: var(--text-muted);
+}
+.file-icon.notebook {
+  background: rgba(245, 158, 11, 0.10);
+  color: var(--warn);
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .file-info { flex: 1; min-width: 0; }

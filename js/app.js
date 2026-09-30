@@ -551,11 +551,13 @@ function uploadFiles(fileList) {
   let addedCount = 0;
   let addedBytes = 0;
   files.forEach((f) => {
-    const ext = f.name.split('.').pop().toLowerCase();
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
     let category = 'other';
-    if (['gguf', 'bin', 'safetensors', 'pt', 'pth', 'onnx'].includes(ext)) category = 'llm';
-    else if (['csv', 'json', 'jsonl', 'parquet', 'txt', 'tsv'].includes(ext)) category = 'dataset';
-    else if (['yaml', 'yml', 'toml', 'ini', 'conf'].includes(ext)) category = 'config';
+    // Support files from: Google Colab, Kaggle, llama.cpp, LM Studio, Jan, Ollama, Unsloth, Pi
+    if (['.gguf', '.bin', '.safetensors', '.pt', '.pth', '.onnx', '.ggmf', '.ckpt', '.h5', '.pb', '.tflite', '.modelfile'].includes(ext)) category = 'llm';
+    else if (['.ipynb'].includes(ext)) category = 'notebook';
+    else if (['.csv', '.json', '.jsonl', '.parquet', '.txt', '.tsv', '.arrow', '.feather'].includes(ext)) category = 'dataset';
+    else if (['.yaml', '.yml', '.toml', '.ini', '.conf'].includes(ext)) category = 'config';
     state.files.push({
       id: uid(),
       name: f.name,
@@ -1404,8 +1406,8 @@ function renderFiles() {
 
   clearBtn.classList.remove('hidden');
 
-  const groups = { llm: [], dataset: [], config: [], other: [] };
-  state.files.forEach((f) => groups[f.category].push(f));
+  const groups = { llm: [], notebook: [], dataset: [], config: [], other: [] };
+  state.files.forEach((f) => { (groups[f.category] || groups.other).push(f); });
 
   const totalSize = state.files.reduce((a, f) => a + f.sizeBytes, 0);
   let summaryHtml = `<span class="chip">${state.files.length} files</span><span class="chip">${humanSize(totalSize)}</span>`;
@@ -1416,10 +1418,11 @@ function renderFiles() {
   summary.classList.remove('hidden');
 
   const CATEGORY_META = {
-    llm: { label: 'LLM Models', icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>' },
-    dataset: { label: 'Datasets', icon: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>' },
-    config: { label: 'Config Files', icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>' },
-    other: { label: 'Other Files', icon: '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>' },
+    llm: { label: 'LLM Models', icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>', platforms: 'llama.cpp · LM Studio · Jan · Ollama · Unsloth · Pi' },
+    notebook: { label: 'Notebooks', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>', platforms: 'Google Colab · Kaggle' },
+    dataset: { label: 'Datasets', icon: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>', platforms: 'Google Colab · Kaggle' },
+    config: { label: 'Config Files', icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>', platforms: 'Ollama · LM Studio · llama.cpp' },
+    other: { label: 'Other Files', icon: '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>', platforms: '' },
   };
 
   let html = '';
@@ -1427,8 +1430,11 @@ function renderFiles() {
     if (list.length === 0) return;
     const meta = CATEGORY_META[cat];
     html += `<div class="file-group">
-      <div class="file-group-header"><span>${meta.label}</span><span class="count">· ${list.length}</span></div>
-      <div class="file-list-items">`;
+      <div class="file-group-header"><span>${meta.label}</span><span class="count">· ${list.length}</span></div>`;
+    if (meta.platforms) {
+      html += `<div class="file-group-platforms">${meta.platforms}</div>`;
+    }
+    html += `<div class="file-list-items">`;
     list.forEach((f) => {
       const time = new Date(f.uploadedAt).toLocaleTimeString('en-US', { hour12: false });
       html += `<div class="file-row">
