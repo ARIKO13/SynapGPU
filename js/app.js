@@ -712,21 +712,37 @@ async function loadCustomGguf(file) {
   lpBar.style.width = '0%';
 
   try {
-    // Dynamically import wllama from jsdelivr CDN (more reliable than esm.run)
-    const wllamaModule = await import('https://cdn.jsdelivr.net/npm/wllama@2.2.1/esm/index.js');
-    const Wllama = wllamaModule.Wllama || wllamaModule.default;
-
+    // Try multiple CDNs — esm.sh is most reliable for ESM imports from npm
+    let Wllama = null;
+    const cdnUrls = [
+      'https://esm.sh/wllama@2.2.1',
+      'https://cdn.skypack.dev/wllama',
+      'https://esm.sh/wllama',
+    ];
+    for (const url of cdnUrls) {
+      try {
+        lpText.textContent = 'Loading wllama from ' + url.split('/')[2] + '…';
+        const mod = await import(url);
+        Wllama = mod.Wllama || mod.default;
+        if (Wllama) {
+          log('wllama loaded from ' + url, 'success');
+          break;
+        }
+      } catch (e) {
+        log('CDN failed (' + url + '): ' + e.message, 'warn');
+        continue;
+      }
+    }
     if (!Wllama) {
-      throw new Error('Wllama class not found in module. Exports: ' + Object.keys(wllamaModule).join(', '));
+      throw new Error('Could not load wllama from any CDN. Check your internet connection.');
     }
 
-    // wllama needs the wasm binary paths — use same CDN
-    const CDN = 'https://cdn.jsdelivr.net/npm/wllama@2.2.1/esm';
+    // wllama wasm paths — esm.sh serves the wasm from the same package
+    const WASM_BASE = 'https://esm.sh/wllama@2.2.1/esm';
     const CONFIG_PATHS = {
-      'wllama.wasm': CDN + '/wllama.wasm',
-      'single-thread/wllama.wasm': CDN + '/single-thread/wllama.wasm',
-      'multi-thread/wllama.wasm': CDN + '/multi-thread/wllama.wasm',
-      'multi-thread/wllama.worker.mjs': CDN + '/multi-thread/wllama.worker.mjs',
+      'wllama.wasm': WASM_BASE + '/wllama.wasm',
+      'single-thread/wllama.wasm': WASM_BASE + '/single-thread/wllama.wasm',
+      'multi-thread/wllama.wasm': WASM_BASE + '/multi-thread/wllama.wasm',
     };
 
     lpText.textContent = 'Initializing wllama…';
@@ -743,7 +759,6 @@ async function loadCustomGguf(file) {
     lpText.textContent = 'Loading ' + file.name + ' (' + humanSize(file.size) + ')…';
     log('Loading custom model: ' + file.name + ' (' + humanSize(file.size) + ')', 'info');
 
-    // wllama's loadModel accepts File objects directly
     await wllamaInstance.loadModel(file, {
       n_ctx: 4096,
       n_threads: navigator.hardwareConcurrency || 4,
