@@ -745,18 +745,27 @@ async function loadCustomGguf(file) {
     lpText.textContent = 'Loading ' + file.name + ' (' + humanSize(file.size) + ')…';
     log('Loading custom model: ' + file.name + ' (' + humanSize(file.size) + ')', 'info');
 
-    // Verify file is valid GGUF before loading
-    const isValid = await verifyGguf(file);
-    if (!isValid) {
-      throw new Error('File does not have valid GGUF magic bytes. Make sure it is a real .gguf model file, not renamed or corrupt.');
+    // Convert File to ArrayBuffer → new Blob to ensure clean data transfer to worker
+    // wllama's Web Worker may not properly read File objects in some browsers
+    lpText.textContent = 'Reading file into memory…';
+    const arrayBuffer = await file.arrayBuffer();
+    const cleanBlob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
+    log('File read: ' + humanSize(arrayBuffer.byteLength) + ' bytes', 'success');
+
+    // Verify GGUF magic bytes
+    const bytes = new Uint8Array(arrayBuffer, 0, Math.min(8, arrayBuffer.byteLength));
+    const isGguf = bytes[0] === 0x47 && bytes[1] === 0x47 && bytes[2] === 0x55 && bytes[3] === 0x46;
+    log('GGUF magic: ' + (isGguf ? 'VALID' : 'INVALID') + ' (0x' + Array.from(bytes.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join(' 0x') + ')', isGguf ? 'success' : 'error');
+    if (!isGguf) {
+      throw new Error('File is not valid GGUF. First 4 bytes: ' + Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16)).join(' '));
     }
 
-    // wllama v3 API: loadModel expects array of Blobs
+    // wllama v3: pass clean Blob (not File) to avoid worker transfer issues
     const ctxSize = file.size > 1000000000 ? 512 : 2048;
     if (file.size > 1000000000) {
-      log('Large model detected (' + humanSize(file.size) + ') — using reduced context (512).', 'warn');
+      log('Large model — using context size 512.', 'warn');
     }
-    const model = await wllamaInstance.loadModel([file], {
+    await wllamaInstance.loadModel([cleanBlob], {
       n_ctx: ctxSize,
       n_threads: navigator.hardwareConcurrency || 4,
       n_gpu_layers: 0,
