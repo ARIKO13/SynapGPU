@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SynapGPU — Drag · Drop · Run · Monitor</title>
+  <title>SynapGPU Desktop</title>
   <meta name="description" content="WebGPU-style notebook: drag & drop LLM/dataset, click Run, monitor GPU/RAM/SSD in real time, test and benchmark your model." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="/static/css/styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%2310b981'/></svg>" />
 </head>
 <body>
@@ -26,7 +26,7 @@
         </div>
         <div class="brand-text">
           <div class="brand-name">SynapGPU</div>
-          <div class="brand-tag">WebGPU LLM · Device Profiler · Benchmark</div>
+          <div class="brand-tag">Local LLM · Real Device Specs · Benchmark</div>
         </div>
       </div>
       <div class="header-right">
@@ -434,6 +434,7 @@
     </footer>
   </div>
 
-  <script src="js/app.js?v=20260930L"></script>
+  <script src="/static/js/socket.io.min.js"></script>
+  <script src="/static/js/app.js"></script>
 </body>
 </html>
