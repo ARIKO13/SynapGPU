@@ -582,24 +582,84 @@ function renderVerdict() {
   const v = computeVerdict();
   const tc = state.benchmarkResults.length;
   $('#verdict-tests-count').textContent = `${tc} test${tc === 1 ? '' : 's'}`;
-  if (!v) { $('#verdict-main').innerHTML = '<span class="dim">No data yet.</span>'; $('#verdict-detail').textContent = ''; return; }
-  const closest = v.closest, onPar = Math.abs(closest.diff) <= 3;
+  if (!v) {
+    $('#verdict-main').innerHTML = '<span class="dim">No data yet.</span>';
+    $('#verdict-detail').textContent = '';
+    $('#verdict-report').innerHTML = '';
+    return;
+  }
+  const userScore = v.userOverall;
+  const closest = v.closest;
+  const onPar = Math.abs(closest.diff) <= 3;
+
+  // Summary line
   let mainHtml;
-  if (onPar) mainHtml = `On par with <span class="highlight">${closest.name}</span> <span class="dim">(${Math.abs(closest.diff)} pts · ${v.userOverall} vs ${closest.overall})</span>`;
-  else if (closest.diff > 0) mainHtml = `Beats <span class="highlight">${closest.name}</span> <span class="dim">(+${closest.diff} pts · ${v.userOverall} vs ${closest.overall})</span>`;
-  else mainHtml = `Slightly below <span class="highlight">${closest.name}</span> <span class="dim">(${Math.abs(closest.diff)} pts · ${v.userOverall} vs ${closest.overall})</span>`;
+  if (onPar) {
+    mainHtml = `Setara dengan <span class="highlight">${closest.name}</span> <span class="dim">(selisih ${Math.abs(closest.diff)} poin · ${userScore} vs ${closest.overall})</span>`;
+  } else if (closest.diff > 0) {
+    mainHtml = `Mengalahkan <span class="highlight">${closest.name}</span> <span class="dim">(+${closest.diff} poin · ${userScore} vs ${closest.overall})</span>`;
+  } else {
+    mainHtml = `Kalah tipis dari <span class="highlight">${closest.name}</span> <span class="dim">(${Math.abs(closest.diff)} poin · ${userScore} vs ${closest.overall})</span>`;
+  }
   $('#verdict-main').innerHTML = mainHtml;
-  let detail = '';
-  if (v.beats.length > 0) {
-    const list = v.beats.slice(0, 3).map((b) => `<span class="pos">${b.name}</span> (+${b.diff})`).join(', ');
-    detail += `Beats ${v.beats.length} LLM: ${list}${v.beats.length > 3 ? '…' : ''}. `;
+  $('#verdict-detail').textContent = `Skor kamu: ${userScore}/100 dari ${tc} test. Dibandingkan dengan ${v.comparisons.length} LLM publik.`;
+
+  // Full report: 3 sections
+  const onParList = v.comparisons.filter((c) => c.key !== closest.key && Math.abs(c.diff) <= 3);
+  const beats = v.beats.filter((c) => c.key !== closest.key);
+  const losesTo = v.losesTo.filter((c) => c.key !== closest.key);
+
+  let reportHtml = '';
+
+  // Section 1: Setara
+  reportHtml += `<div class="report-section">`;
+  reportHtml += `<div class="report-section-header"><span class="report-section-title neutral">Setara dengan</span><span class="report-section-count">${onParList.length} LLM</span></div>`;
+  if (onParList.length === 0) {
+    reportHtml += `<div class="report-empty">Tidak ada LLM yang setara (selisih ≤3 poin).</div>`;
+  } else {
+    reportHtml += `<div class="report-list">`;
+    onParList.forEach((c) => {
+      const sign = c.diff > 0 ? '+' : '';
+      reportHtml += `<div class="report-row neutral"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff neutral">${sign}${c.diff}</span></div>`;
+    });
+    reportHtml += `</div>`;
   }
-  if (v.losesTo.length > 0) {
-    const list = v.losesTo.slice(0, 3).map((b) => `<span class="neg">${b.name}</span> (${b.diff})`).join(', ');
-    detail += `Loses to ${v.losesTo.length} LLM: ${list}${v.losesTo.length > 3 ? '…' : ''}.`;
+  reportHtml += `</div>`;
+
+  // Section 2: Mengalahkan
+  reportHtml += `<div class="report-section">`;
+  reportHtml += `<div class="report-section-header"><span class="report-section-title pos">Mengalahkan</span><span class="report-section-count">${beats.length} LLM</span></div>`;
+  if (beats.length === 0) {
+    reportHtml += `<div class="report-empty">Belum mengalahkan LLM publik manapun.</div>`;
+  } else {
+    reportHtml += `<div class="report-list">`;
+    beats.forEach((c) => {
+      reportHtml += `<div class="report-row pos"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff pos">+${c.diff}</span></div>`;
+    });
+    reportHtml += `</div>`;
   }
-  if (state.benchmarkSource) detail += ` <span class="dim">Source: ${escapeHtml(state.benchmarkSource)}.</span>`;
-  $('#verdict-detail').innerHTML = detail || 'Your LLM is in a unique position.';
+  reportHtml += `</div>`;
+
+  // Section 3: Kalah dari
+  reportHtml += `<div class="report-section">`;
+  reportHtml += `<div class="report-section-header"><span class="report-section-title neg">Kalah dari</span><span class="report-section-count">${losesTo.length} LLM</span></div>`;
+  if (losesTo.length === 0) {
+    reportHtml += `<div class="report-empty">Tidak ada LLM yang lebih kuat — kamu juara!</div>`;
+  } else {
+    reportHtml += `<div class="report-list">`;
+    losesTo.forEach((c) => {
+      reportHtml += `<div class="report-row neg"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff neg">${c.diff}</span></div>`;
+    });
+    reportHtml += `</div>`;
+  }
+  reportHtml += `</div>`;
+
+  // Source note
+  if (state.benchmarkSource) {
+    reportHtml += `<div class="report-source">Source: ${escapeHtml(state.benchmarkSource)}</div>`;
+  }
+
+  $('#verdict-report').innerHTML = reportHtml;
 }
 
 function renderDimScores() {
