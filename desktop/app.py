@@ -779,4 +779,6 @@ if __name__ == "__main__":
     print("Press Ctrl+C to stop.")
 
     threading.Thread(target=metrics_broadcaster, daemon=True).start()
-    socketio.run(app, host="127.0.0.1", port=3000, debug=False, allow_unsafe_werkzeug=True)
+    # Bind to 0.0.0.0 so external tools (Caddy gateway, other hosts) can reach it.
+    # For end users this is fine — they run it locally and access via localhost.
+    socketio.run(app, host="0.0.0.0", port=3000, debug=False, allow_unsafe_werkzeug=True)
