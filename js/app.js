@@ -712,37 +712,24 @@ async function loadCustomGguf(file) {
   lpBar.style.width = '0%';
 
   try {
-    // Try multiple CDNs — esm.sh is most reliable for ESM imports from npm
-    let Wllama = null;
-    const cdnUrls = [
-      'https://esm.sh/wllama@2.2.1',
-      'https://cdn.skypack.dev/wllama',
-      'https://esm.sh/wllama',
-    ];
-    for (const url of cdnUrls) {
-      try {
-        lpText.textContent = 'Loading wllama from ' + url.split('/')[2] + '…';
-        const mod = await import(url);
-        Wllama = mod.Wllama || mod.default;
-        if (Wllama) {
-          log('wllama loaded from ' + url, 'success');
-          break;
-        }
-      } catch (e) {
-        log('CDN failed (' + url + '): ' + e.message, 'warn');
-        continue;
-      }
-    }
-    if (!Wllama) {
-      throw new Error('Could not load wllama from any CDN. Check your internet connection.');
-    }
+    // wllama is published as @wllama/wllama on npm, not "wllama"
+    const WLLAMA_PKG = '@wllama/wllama@3.6.1';
+    const WLLAMA_CDN = 'https://cdn.jsdelivr.net/npm/' + WLLAMA_PKG + '/esm';
 
-    // wllama wasm paths — esm.sh serves the wasm from the same package
-    const WASM_BASE = 'https://esm.sh/wllama@2.2.1/esm';
+    lpText.textContent = 'Loading wllama library…';
+    const mod = await import(WLLAMA_CDN + '/index.js');
+    const Wllama = mod.Wllama;
+
+    if (!Wllama) {
+      throw new Error('Wllama class not found. Exports: ' + Object.keys(mod).join(', '));
+    }
+    log('wllama v3.6.1 loaded.', 'success');
+
+    // wllama needs paths to wasm files
     const CONFIG_PATHS = {
-      'wllama.wasm': WASM_BASE + '/wllama.wasm',
-      'single-thread/wllama.wasm': WASM_BASE + '/single-thread/wllama.wasm',
-      'multi-thread/wllama.wasm': WASM_BASE + '/multi-thread/wllama.wasm',
+      'wllama.wasm': WLLAMA_CDN + '/wasm/single-thread/wllama.wasm',
+      'single-thread/wllama.wasm': WLLAMA_CDN + '/wasm/single-thread/wllama.wasm',
+      'multi-thread/wllama.wasm': WLLAMA_CDN + '/wasm/multi-thread/wllama.wasm',
     };
 
     lpText.textContent = 'Initializing wllama…';
