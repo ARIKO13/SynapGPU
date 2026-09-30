@@ -622,22 +622,85 @@ function handleStop() {
 // ===========================================================================
 // Chat (mock LLM responses)
 // ===========================================================================
-const MOCK_RESPONSES = [
-  { match: /webgpu|web ?gpu/i,
-    text: "WebGPU is a modern web API that exposes GPU compute and graphics capabilities directly in the browser. Unlike WebGL, it's built on top of Vulkan/Metal/D3D12 and supports general-purpose compute shaders, making it viable for LLM inference via projects like transformers.js and wllama.\n\nKey advantages:\n- Direct GPU memory access from JavaScript\n- Compute shaders (not just graphics)\n- Lower overhead than WebGL\n\nIn SynapGPU, we use WebGPU to detect your GPU model — that's why your device info shows up in the Device card!" },
-  { match: /quicksort|sort algorithm/i,
-    text: "Here's a clean Python quicksort implementation:\n\n```python\ndef quicksort(arr):\n    \"\"\"Sort a list in-place using quicksort.\"\"\"\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\nprint(quicksort([3, 6, 8, 10, 1, 2, 1]))  # [1, 1, 2, 3, 6, 8, 10]\n```\n\nTime complexity: O(n log n) average, O(n²) worst case." },
-  { match: /integral|x\^2|math|calculate/i,
-    text: "To compute ∫₀³ x² dx:\n\n**Step 1: Antiderivative**\nThe antiderivative of xⁿ is xⁿ⁺¹/(n+1).\nFor x², n=2, so antiderivative = x³/3.\n\n**Step 2: Apply bounds**\n∫₀³ x² dx = [x³/3]₀³ = (3³/3) - (0³/3) = 27/3 - 0 = **9**" },
-  { match: /startup|idea|name/i,
-    text: "Here are 5 startup name ideas in the AI space:\n\n1. **SynapStack** — neural network infra platform\n2. **TokenForge** — fine-tuning API service\n3. **GPUHive** — distributed inference marketplace\n4. **QuantaLabs** — applied AI research consultancy\n5. **Vexa AI** — voice-first assistant platform" },
-  { match: /hello|hi|halo/i,
-    text: "Hello! This is a mock response from the SynapGPU public demo. Your real device specs are shown in the Device card — that's the actual point of this app!\n\nFor real LLM responses, deploy the Python backend (see README)." },
-];
+// Mock knowledge base — pre-written answers untuk topik umum.
+// Penting: response harus RELEVAN dengan prompt supaya benchmark analyzer
+// score-nya akurat. Kalau response nggak nyambung, score akan drop.
+
+const MOCK_KNOWLEDGE = {
+  // --- Indonesian geography & landmarks ---
+  jakarta: {
+    match: /jakarta/i,
+    text: "Jakarta adalah ibu kota Republik Indonesia sejak kemerdekaan tahun 1945. Kota terbesar di Asia Tenggara dengan populasi sekitar 10 juta jiwa.\n\nSebagai pusat pemerintahan dan ekonomi, Jakarta menampung markas besar BUMN, bank sentral (Bank Indonesia), dan kantor kedutaan besar negara-negara asing. Kota ini juga merupakan hub transportasi utama dengan Bandara Soekarno-Hatta yang melayani jutaan penumpang per tahun.\n\nNamun, pemerintah Indonesia sedang memindahkan ibu kota ke Nusantara di Kalimantan Timur karena Jakarta menghadapi tantangan serius: banjir tahunan, penurunan tanah (land subsidence), dan kepadatan lalu lintas yang parah.",
+  },
+  monas: {
+    match: /monas|monumen nasional/i,
+    text: "Monas (Monumen Nasional) adalah ikon kota Jakarta, terletak di Lapangan Medan Merdeka. Diresmikan oleh Presiden Soekarno pada 17 Agustus 1961 dan dibuka untuk umum tahun 1975.\n\nTinggi total 132 meter, dengan puncak dilapisi emas 50 kg. Di bagian atas terdapat pelataran observasi pada ketinggian 115 meter yang bisa diakses via lift. Di dasar terdapat museum sejarah Indonesia.\n\nApi emas di puncak Monas melambangkan semangat perjuangan kemerdekaan. Setiap hari raya, Monas menjadi titik fokus upacara kenegaraan.",
+  },
+  indonesia: {
+    match: /indonesia/i,
+    text: "Indonesia adalah negara kepulauan terbesar di dunia, terdiri dari 17.508 pulau yang membentang sepanjang 5.120 km dari Sabang sampai Merauke.\n\nDengan populasi 275+ juta jiwa, Indonesia adalah negara berpenduduk ke-4 terbesar dunia setelah China, India, dan Amerika Serikat. Bahasa resmi adalah Bahasa Indonesia, namun terdapat 700+ bahasa daerah.\n\nIndonesia merdeka pada 17 Agustus 1945 setelah Soekarno-Hatta memproklamasikan kemerdekaan. Sistem pemerintahan republik presidensial, dengan ibu kota baru Nusantara (dalam proses pemindahan dari Jakarta).\n\nEkonomi terbesar di Asia Tenggara, anggota G20, dengan PDB nominal sekitar 1.3 triliun USD.",
+  },
+  bandung: {
+    match: /bandung/i,
+    text: "Bandung adalah ibu kota Provinsi Jawa Barat, terletak 768 meter di atas permukaan laut. Dijuluki 'Kota Kembang' karena keindahan taman dan bunganya.\n\nBandung dikenal sebagai pusat pendidikan tinggi (ITB, Universitas Padjadjaran, UNPAR), kuliner (seblak, batagor, surabi), dan fashion (factory outlet). Iklim sejuk (18-25°C) menjadikannya destinasi wisata favorit warga Jakarta.\n\nSejarah: Bandung pernah dijuluki 'Parijs van Java' oleh kolonial Belanda karena kemiripan iklimnya dengan Paris. Konferensi Asia-Afrika 1955 diadakan di sini, momen penting bagi gerakan Non-Blok.",
+  },
+  surabaya: {
+    match: /surabaya/i,
+    text: "Surabaya adalah ibu kota Jawa Timur dan kota terbesar kedua di Indonesia setelah Jakarta. Dijuluki 'Kota Pahlawan' karena Pertempuran Surabaya 10 November 1945.\n\nSurabaya adalah pelabuhan utama Indonesia, hub industri dan perdagangan. Jembatan Suramadu menghubungkan Surabaya dengan Pulau Madura.\n\nSimbol kota: ikan hiu dan buaya (Suro dan Boyo), melambangkan legenda pendiri kota. Monumen Kapal Selam di Taman Monumen Kapal Selam menjadi ikon wisata.",
+  },
+  borobudur: {
+    match: /borobudur/i,
+    text: "Candi Borobudur adalah candi Buddha terbesar di dunia, terletak di Magelang, Jawa Tengah. Dibangun pada abad ke-8 oleh Dinasti Syailendra.\n\nArsitektur: 6 teras persegi + 3 teras melingkar, dengan 504 arca Buddha dan 2.672 panel relief. Puncaknya adalah stupa utama yang dikelilingi 72 stupa berlubang berisi arca Buddha.\n\nUNESCO menetapkan Borobudur sebagai World Heritage Site tahun 1991. Setiap Waisak, ribuan umat Buddha berkumpul untuk meditasi.\n\nBorobudur ditinggalkan abad ke-14 seiring masuknya Islam, kemudian tertutup abu vulkanik Merapi dan vegetasi hingga ditemukan kembali oleh Sir Thomas Stamford Raffles tahun 1814.",
+  },
+  // --- Tech topics ---
+  webgpu: {
+    match: /webgpu|web ?gpu/i,
+    text: "WebGPU is a modern web API that exposes GPU compute and graphics capabilities directly in the browser. Unlike WebGL, it's built on top of Vulkan/Metal/D3D12 and supports general-purpose compute shaders.\n\nKey advantages:\n- Direct GPU memory access from JavaScript\n- Compute shaders (not just graphics)\n- Lower overhead than WebGL\n\nIn SynapGPU, we use WebGPU to detect your GPU model — that's why your device info shows up in the Device card.\n\nFor LLM inference specifically, WebGPU enables in-browser execution of small models (7B-13B quantized) via projects like transformers.js and wllama.",
+  },
+  python: {
+    match: /\bpython\b/i,
+    text: "Python adalah bahasa pemrograman tingkat tinggi yang dibuat oleh Guido van Rossum tahun 1991. Dikenal karena sintaks yang clean dan readable.\n\nFilosofi Python: 'There should be one — and preferably only one — obvious way to do it' (The Zen of Python).\n\nContoh kode:\n```python\ndef fibonacci(n):\n    \"\"\"Generate Fibonacci sequence up to n.\"\"\"\n    a, b = 0, 1\n    result = []\n    while a < n:\n        result.append(a)\n        a, b = b, a + b\n    return result\n\nprint(fibonacci(100))  # [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]\n```\n\nPython dipakai di: web (Django, Flask), data science (NumPy, Pandas), AI/ML (PyTorch, TensorFlow), automation, scripting.",
+  },
+  ai: {
+    match: /\bai\b|artificial intelligence|kecerdasan buatan/i,
+    text: "AI (Artificial Intelligence) / Kecerdasan Buatan adalah bidang ilmu komputer yang fokus pada sistem yang dapat meniru kecerdasan manusia.\n\nKategori utama AI:\n1. **Narrow AI** — spesifik satu tugas (chatbot, image recognition, recommendation system). Semua AI yang ada sekarang termasuk kategori ini.\n2. **General AI (AGI)** — AI yang bisa belajar tugas apapun seperti manusia. Belum ada, masih research.\n3. **Super AI (ASI)** — melebihi kecerdasan manusia. Spekulatif.\n\nTeknik utama: Machine Learning (supervised, unsupervised, reinforcement), Deep Learning (neural network berlapis), NLP (language), Computer Vision (image), dan sekarang LLM (Large Language Model) seperti GPT, Claude, Llama.\n\nEtika AI: bias, privasi, displacement pekerjaan, dan keamanan menjadi perdebatan aktif.",
+  },
+  llm: {
+    match: /\bllm\b|large language model/i,
+    text: "LLM (Large Language Model) adalah model AI yang dilatih pada miliaran token teks untuk memahami dan menghasilkan bahasa manusia.\n\nArsitektur: Transformer (diperkenalkan Google 2017 dengan paper 'Attention Is All You Need'). Parameter: 7B (Llama 3.1 8B), 70B (Llama 3.1 70B), 175B (GPT-3), 1T+ (GPT-4 estimation).\n\nTraining pipeline:\n1. **Pre-training** — belajar dari teks internet (Common Crawl, Wikipedia, books)\n2. **Fine-tuning** — instruction tuning (chat, Q&A)\n3. **RLHF** — Reinforcement Learning from Human Feedback\n\nBenchmark utama: MMLU (knowledge), HumanEval (code), GSM8K (math), LMSYS Arena (human preference).\n\nSynapGPU membandingkan model kamu dengan 14 LLM publik di tab Benchmark.",
+  },
+};
+
+const MOCK_RESPONSES_FALLBACK = {
+  quicksort: {
+    match: /quicksort|sort algorithm/i,
+    text: "Here's a clean Python quicksort implementation:\n\n```python\ndef quicksort(arr):\n    \"\"\"Sort a list in-place using quicksort.\n\n    Time: O(n log n) average, O(n²) worst case.\n    Space: O(n) for list comprehensions.\n    \"\"\"\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\nprint(quicksort([3, 6, 8, 10, 1, 2, 1]))  # [1, 1, 2, 3, 6, 8, 10]\n```\n\nIn-place version (O(1) extra space, O(log n) call stack):\n```python\ndef quicksort_inplace(arr, low=0, high=None):\n    if high is None: high = len(arr) - 1\n    if low < high:\n        pivot_idx = partition(arr, low, high)\n        quicksort_inplace(arr, low, pivot_idx - 1)\n        quicksort_inplace(arr, pivot_idx + 1, high)\n```",
+  },
+  integral: {
+    match: /integral|x\^2|math|calculate|integral dari/i,
+    text: "Untuk menghitung ∫₀³ x² dx:\n\n**Langkah 1: Antiturunan**\nAntiturunan dari xⁿ adalah xⁿ⁺¹/(n+1).\nUntuk x², n=2, sehingga antiturunan = x³/3.\n\n**Langkah 2: Substitusi batas**\n∫₀³ x² dx = [x³/3]₀³\n         = (3³/3) - (0³/3)\n         = 27/3 - 0\n         = **9**\n\nJadi nilai integralnya adalah 9.\n\nSecara geometris, ini adalah luas daerah di bawah kurva y = x² dari x=0 sampai x=3, yang membentuk area melengkung dengan luas 9 satuan persegi.\n\nVerifikasi dengan aturan trapesium atau Simpson akan mendekati nilai 9 untuk partisi yang cukup halus.",
+  },
+  startup: {
+    match: /startup|idea|name|ide nama/i,
+    text: "Berikut 5 ide nama startup AI:\n\n1. **SynapStack** — platform infrastruktur neural network\n2. **TokenForge** — service fine-tuning API\n3. **GPUHive** — marketplace distributed inference\n4. **QuantaLabs** — konsultansi riset AI terapan\n5. **Vexa AI** — platform asisten voice-first\n\nTiap nama pendek, brandable, .com-friendly, dan menggambarkan metafora neural/synaptic atau komputasi/quantum.",
+  },
+};
 
 function pickMockResponse(prompt) {
-  for (const r of MOCK_RESPONSES) if (r.match.test(prompt)) return r.text;
-  return `This is a simulated response. The SynapGPU public demo runs entirely in your browser — your device specs are real, but the chat uses pre-written mock answers.\n\nFor real LLM responses, deploy the Flask backend (see README).\n\nYour prompt was: "${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"`;
+  // Coba knowledge base dulu (Indonesia topics, tech, etc)
+  for (const key in MOCK_KNOWLEDGE) {
+    if (MOCK_KNOWLEDGE[key].match.test(prompt)) {
+      return MOCK_KNOWLEDGE[key].text;
+    }
+  }
+  // Fallback patterns (code, math, startup)
+  for (const key in MOCK_RESPONSES_FALLBACK) {
+    if (MOCK_RESPONSES_FALLBACK[key].match.test(prompt)) {
+      return MOCK_RESPONSES_FALLBACK[key].text;
+    }
+  }
+  // Generic fallback — coba jawab dengan struktur yang reasonable
+  return `Pertanyaanmu tentang "${prompt}" menarik. Namun ini adalah demo web publik SynapGPU yang berjalan di GitHub Pages — tidak bisa memanggil LLM API sungguhan karena masalah keamanan (API key tidak boleh di-expose di browser).\n\nUntuk jawaban LLM yang sebenarnya:\n1. Download versi Desktop dari tombol di header\n2. Install Ollama di komputermu\n3. Jalankan SynapGPU Desktop — otomatis detect Ollama\n4. Chat dengan LLM sungguhan (Llama 3.1, Mistral, dll)\n\nDemo web ini cocok untuk: preview UI, cek spek device, dan lihat format benchmark report. Untuk inference LLM sungguhan, pakai versi Desktop.`;
 }
 
 function sendMessage() {
