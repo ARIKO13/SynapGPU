@@ -746,12 +746,19 @@ async function loadCustomGguf(file) {
     log('Loading custom model: ' + file.name + ' (' + humanSize(file.size) + ')', 'info');
 
     // wllama v3 API: loadModel expects array of Blobs
+    // Use smaller context (1024) to reduce memory pressure for large models
+    // A 1.5GB Q4 model needs ~3GB RAM when loaded into WASM
+    const ctxSize = file.size > 1000000000 ? 512 : 2048;
+    if (file.size > 1000000000) {
+      log('Large model detected (' + humanSize(file.size) + ') — using reduced context (512) for memory safety.', 'warn');
+    }
     const model = await wllamaInstance.loadModel([file], {
-      n_ctx: 4096,
+      n_ctx: ctxSize,
       n_threads: navigator.hardwareConcurrency || 4,
+      n_gpu_layers: 0, // disable WebGPU layers — pure WASM
+      n_batch: 128,
     });
-    log('Model object returned: ' + (model ? typeof model : 'null'), 'info');
-    log('isModelLoaded: ' + wllamaInstance.isModelLoaded(), 'info');
+    log('Model loaded. isModelLoaded: ' + wllamaInstance.isModelLoaded(), 'success');
 
     activeModelId = file.name;
     log('Custom model loaded: ' + file.name, 'success');
