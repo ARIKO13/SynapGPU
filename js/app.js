@@ -1329,9 +1329,7 @@ function renderConsole() {
 function renderChatMessages() {
   const container = $('#chat-messages');
   if (state.chatMessages.length === 0) {
-    const sub = state.runState !== 'running'
-      ? 'Click Run in the header to load the model first.'
-      : 'Type a message and press Cmd/Ctrl+Enter to send.';
+    const sub = 'No model loaded yet. Pick a model above and click "Load via WebGPU" to download and run an LLM directly in your browser.';
     container.innerHTML = `<div class="chat-empty"><p class="ce-sub">${sub}</p></div>`;
     return;
   }
