@@ -745,17 +745,21 @@ async function loadCustomGguf(file) {
     lpText.textContent = 'Loading ' + file.name + ' (' + humanSize(file.size) + ')…';
     log('Loading custom model: ' + file.name + ' (' + humanSize(file.size) + ')', 'info');
 
+    // Verify file is valid GGUF before loading
+    const isValid = await verifyGguf(file);
+    if (!isValid) {
+      throw new Error('File does not have valid GGUF magic bytes. Make sure it is a real .gguf model file, not renamed or corrupt.');
+    }
+
     // wllama v3 API: loadModel expects array of Blobs
-    // Use smaller context (1024) to reduce memory pressure for large models
-    // A 1.5GB Q4 model needs ~3GB RAM when loaded into WASM
     const ctxSize = file.size > 1000000000 ? 512 : 2048;
     if (file.size > 1000000000) {
-      log('Large model detected (' + humanSize(file.size) + ') — using reduced context (512) for memory safety.', 'warn');
+      log('Large model detected (' + humanSize(file.size) + ') — using reduced context (512).', 'warn');
     }
     const model = await wllamaInstance.loadModel([file], {
       n_ctx: ctxSize,
       n_threads: navigator.hardwareConcurrency || 4,
-      n_gpu_layers: 0, // disable WebGPU layers — pure WASM
+      n_gpu_layers: 0,
       n_batch: 128,
     });
     log('Model loaded. isModelLoaded: ' + wllamaInstance.isModelLoaded(), 'success');
@@ -1946,3 +1950,15 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Verify file is valid GGUF before loading
+async function verifyGguf(file) {
+  if (!file) return false;
+  const slice = file.slice(0, 8);
+  const buf = await slice.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  // GGUF magic: 0x47 0x47 0x55 0x46 = "GGUF" (little-endian)
+  const isGguf = bytes[0] === 0x47 && bytes[1] === 0x47 && bytes[2] === 0x55 && bytes[3] === 0x46;
+  log('GGUF magic check: ' + (isGguf ? 'VALID' : 'INVALID') + ' (bytes: ' + Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ') + ')', isGguf ? 'success' : 'error');
+  return isGguf;
+}
