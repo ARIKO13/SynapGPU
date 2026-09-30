@@ -1,17 +1,17 @@
-/* SynapGPU Desktop — Frontend logic
+/* SynapGPU Desktop — Frontend
  *
- * Talks to local Python backend (Flask + Flask-SocketIO) running on
- * http://localhost:3000. Real device specs are read server-side via
- * nvidia-smi / wmic / system_profiler / psutil, and LLM benchmark data
- * is fetched live from HuggingFace Open LLM Leaderboard.
+ * Simple profiler UI. No drag-drop-run flow (that's for the web version).
+ * Desktop is for: open app → see real device specs → see live metrics →
+ * (optionally) test local LLM and compare to public benchmarks.
  */
 'use strict';
 
 const state = {
-  files: [],
-  runState: 'idle',
-  activeModel: null,
-  runStartedAt: null,
+  deviceInfo: null,
+  benchmarks: {},
+  benchmarkSource: '',
+  localLlms: {},
+  activeLlm: null,
   metrics: null,
   metricsHistory: [],
   gpuUtilHistory: [],
@@ -22,13 +22,8 @@ const state = {
   chatMessages: [],
   chatStreaming: false,
   chatAbortController: null,
-  uptimeTimer: null,
   benchmarkResults: [],
-  radarCompareKey: 'gpt4o',
-  deviceInfo: null,
-  benchmarks: {},
-  benchmarkSource: '',
-  localLlms: {},
+  radarCompareKey: null,
 };
 
 const MAX_HISTORY = 60;
@@ -40,16 +35,8 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-function humanSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let v = bytes / 1024; let i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
-}
-
 function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => ({
+  return String(s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 }
@@ -60,9 +47,9 @@ function log(text, level = 'info') {
   renderConsole();
 }
 
-// ---------------------------------------------------------------------------
-// WebSocket connection to local backend
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// WebSocket connection to local Python backend
+// ===========================================================================
 function connectSocket() {
   const socket = io({
     transports: ['websocket', 'polling'],
@@ -73,7 +60,7 @@ function connectSocket() {
   });
   socket.on('connect', () => {
     state.connected = true;
-    log('Connected to SynapGPU backend.', 'success');
+    log('Connected to local backend.', 'success');
     renderConnection();
   });
   socket.on('disconnect', () => {
@@ -93,26 +80,19 @@ function connectSocket() {
     if (state.ssdReadHistory.length > MAX_HISTORY) state.ssdReadHistory.shift();
     renderMetrics();
   });
-  socket.on('session:state', (s) => {
-    state.runState = s.runState;
-    state.activeModel = s.activeModel;
-    state.runStartedAt = s.runStartedAt;
-    if (s.runState === 'loading') log('Loading model…', 'info');
-    else if (s.runState === 'running') log('Model ready.', 'success');
-    else if (s.runState === 'stopped') log('Stopped.', 'warn');
-    else if (s.runState === 'idle') log('Idle.', 'info');
-    renderRunState();
-  });
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Fetch device info, benchmarks, local LLMs from backend
-// ---------------------------------------------------------------------------
+// ===========================================================================
 async function fetchDeviceInfo() {
   try {
     const res = await fetch('/api/device-info');
-    if (res.ok) state.deviceInfo = await res.json();
-  } catch (e) { /* server unavailable */ }
+    if (res.ok) {
+      state.deviceInfo = await res.json();
+      renderDeviceInfo();
+    }
+  } catch (e) { log(`Device info fetch failed: ${e.message}`, 'error'); }
 }
 
 async function fetchBenchmarks() {
@@ -122,10 +102,12 @@ async function fetchBenchmarks() {
       const data = await res.json();
       state.benchmarks = data.benchmarks || {};
       state.benchmarkSource = data.source || 'unknown';
-      log(`LLM benchmark source: ${state.benchmarkSource} (${Object.keys(state.benchmarks).length} models)`, 'info');
+      const count = Object.keys(state.benchmarks).length;
+      log(`Loaded ${count} LLM benchmarks (${state.benchmarkSource}).`, 'success');
+      renderBenchmarkSource();
       renderBenchmark();
     }
-  } catch (e) { /* server unavailable */ }
+  } catch (e) { log(`Benchmark fetch failed: ${e.message}`, 'error'); }
 }
 
 async function fetchLocalLlms() {
@@ -134,113 +116,39 @@ async function fetchLocalLlms() {
     if (res.ok) {
       const data = await res.json();
       state.localLlms = data.servers || {};
-      if (Object.keys(state.localLlms).length > 0) {
-        log(`Local LLM detected: ${Object.keys(state.localLlms).join(', ')}`, 'success');
+      state.activeLlm = data.active ? data.active.name : null;
+      const keys = Object.keys(state.localLlms);
+      if (keys.length > 0) {
+        log(`Local LLM detected: ${keys.join(', ')}`, 'success');
+        $('#ce-sub').textContent = `Type a message and press Cmd/Ctrl+Enter to send. Routes to ${state.activeLlm}.`;
+        $('#chat-input').disabled = false;
+        $('#chat-input').placeholder = 'Type a message… (Cmd/Ctrl+Enter to send)';
+        $('#chat-send-btn').disabled = false;
+        $('#chat-model-badge').textContent = state.activeLlm;
+        $('#chat-model-badge').classList.remove('hidden');
+      } else {
+        log('No local LLM detected. Install Ollama, llama.cpp, or LM Studio to enable chat.', 'warn');
       }
-    }
-  } catch (e) { /* server unavailable */ }
-}
-
-async function refreshFiles() {
-  try {
-    const res = await fetch('/api/files');
-    if (res.ok) {
-      const data = await res.json();
-      state.files = data.files || [];
-      renderFiles();
-      renderRunState();
+      renderLocalLlms();
+      renderLlmServerBadge();
     }
   } catch (e) { /* ignore */ }
 }
 
-// ---------------------------------------------------------------------------
-// File upload (real backend)
-// ---------------------------------------------------------------------------
-async function uploadFiles(fileList) {
-  const files = Array.from(fileList);
-  if (files.length === 0) return;
-  log(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`, 'info');
-  try {
-    const formData = new FormData();
-    files.forEach((f) => formData.append('files', f));
-    const res = await fetch('/api/files', { method: 'POST', body: formData });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    state.files = data.files;
-    const totalBytes = data.created.reduce((a, f) => a + f.sizeBytes, 0);
-    log(`Uploaded ${data.created.length} file${data.created.length > 1 ? 's' : ''} (${humanSize(totalBytes)}).`, 'success');
-    renderFiles();
-    renderRunState();
-  } catch (e) {
-    log(`Upload failed: ${e.message}`, 'error');
-  }
+async function rescanLocalLlms() {
+  $('#llm-servers-list').innerHTML = '<div class="llm-empty">Rescanning…</div>';
+  await fetchLocalLlms();
 }
 
-async function deleteFile(id) {
-  try {
-    const res = await fetch(`/api/files?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    state.files = state.files.filter((f) => f.id !== id);
-    log('File deleted.', 'info');
-    renderFiles();
-    renderRunState();
-  } catch (e) {
-    log(`Delete failed: ${e.message}`, 'error');
-  }
-}
-
-async function clearAllFiles() {
-  for (const f of state.files) {
-    try { await fetch(`/api/files?id=${encodeURIComponent(f.id)}`, { method: 'DELETE' }); } catch (e) {}
-  }
-  state.files = [];
-  log('All files cleared.', 'info');
-  renderFiles();
-  renderRunState();
-}
-
-// ---------------------------------------------------------------------------
-// Run control
-// ---------------------------------------------------------------------------
-async function handleRun() {
-  const llmFile = state.files.find((f) => f.category === 'llm');
-  const model = llmFile ? llmFile.name : null;
-  log(`Run: ${model ?? '(no model)'}`, 'info');
-  try {
-    await fetch('/api/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'start', model }),
-    });
-  } catch (e) {}
-  state.runState = 'loading';
-  state.activeModel = model;
-  state.runStartedAt = Date.now();
-  renderRunState();
-}
-
-async function handleStop() {
-  log('Stop.', 'warn');
-  try {
-    await fetch('/api/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'stop' }),
-    });
-  } catch (e) {}
-  state.runState = 'stopped';
-  renderRunState();
-}
-
-// ---------------------------------------------------------------------------
-// Chat — real backend (Ollama / llama.cpp / LM Studio / ZAI API)
-// ---------------------------------------------------------------------------
-const SYSTEM_PROMPT = 'You are a helpful AI assistant loaded from the user\'s uploaded model file. Answer clearly and concisely.';
+// ===========================================================================
+// Chat (real backend — routes to Ollama / llama.cpp / LM Studio)
+// ===========================================================================
+const SYSTEM_PROMPT = 'You are a helpful AI assistant. Answer clearly and concisely.';
 
 async function sendMessage() {
   const input = $('#chat-input');
   const text = input.value.trim();
-  if (!text || state.runState !== 'running' || state.chatStreaming) return;
+  if (!text || state.chatStreaming) return;
 
   const userMsg = { id: uid(), role: 'user', content: text, ts: Date.now() };
   const assistantId = uid();
@@ -261,7 +169,6 @@ async function sendMessage() {
     const history = state.chatMessages
       .filter((m) => m.id !== assistantId && m.role !== 'system')
       .map((m) => ({ role: m.role, content: m.content }));
-
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -270,16 +177,13 @@ async function sendMessage() {
       }),
       signal: controller.signal,
     });
-
     if (!res.ok || !res.body) {
       const errText = await res.text();
       throw new Error(errText || `HTTP ${res.status}`);
     }
-
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -297,7 +201,6 @@ async function sendMessage() {
           } else if (evt.type === 'done') {
             const msg = state.chatMessages.find((m) => m.id === assistantId);
             if (msg) { msg.streaming = false; msg.latencyMs = evt.latencyMs; }
-            // Analyze for benchmark
             const analysis = analyzeResponse(text, msg ? msg.content : '', evt.latencyMs || 0);
             state.benchmarkResults.push({
               id: uid(), prompt: text, response: msg ? msg.content : '', analysis, ts: Date.now(),
@@ -343,9 +246,9 @@ function clearChat() {
   renderChatMessages();
 }
 
-// ---------------------------------------------------------------------------
-// Benchmark analyzer (same heuristic as web version)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Benchmark analyzer
+// ===========================================================================
 const DIMENSIONS = [
   { key: 'reasoning', label: 'Reasoning', hint: 'Logical & multi-step thinking' },
   { key: 'code', label: 'Code', hint: 'Code blocks & function defs' },
@@ -356,7 +259,6 @@ const DIMENSIONS = [
 ];
 
 function analyzeResponse(userMsg, assistantMsg, latencyMs) {
-  const promptLen = userMsg.length;
   const responseLen = assistantMsg.length;
   const promptWords = Math.max(1, userMsg.trim().split(/\s+/).length);
   const responseWords = Math.max(1, assistantMsg.trim().split(/\s+/).length);
@@ -370,7 +272,7 @@ function analyzeResponse(userMsg, assistantMsg, latencyMs) {
   const hasLatex = /\\(frac|sqrt|int|sum|alpha|beta|gamma|theta)/.test(assistantMsg);
   const hasNumbers = /\d+(\.\d+)?/.test(assistantMsg);
   const hasEquations = /[^=!<>]=[^\s=]/.test(assistantMsg);
-  const reasoningWords = (assistantMsg.toLowerCase().match(/\b(karena|oleh karena itu|sebab|akibatnya|pertama|kedua|ketiga|selanjutnya|namun|akan tetapi|sebaliknya|sehingga|makanya|jadi|therefore|because|thus|hence|consequently|first|second|third|however|moreover|furthermore|in conclusion|step|analysis|reason)\b/g) || []).length;
+  const reasoningWords = (assistantMsg.toLowerCase().match(/\b(therefore|because|thus|hence|consequently|first|second|third|however|moreover|furthermore|step|analysis|reason)\b/g) || []).length;
   const sentenceCount = (assistantMsg.match(/[.!?\n]+/g) || []).length;
   const avgSentenceLen = sentenceCount > 0 ? responseWords / sentenceCount : responseWords;
   const responseDepth = responseWords / promptWords;
@@ -384,12 +286,12 @@ function analyzeResponse(userMsg, assistantMsg, latencyMs) {
   const coherenceScore = Math.min(100, Math.round((coherent ? 35 : 0) + (responseWords > 30 ? 20 : 0) + (sentenceCount > 2 ? 20 : sentenceCount * 7) + (avgSentenceLen > 5 && avgSentenceLen < 25 ? 25 : 10)));
   const scores = { reasoning: reasoningScore, code: codeScore, math: mathScore, knowledge: knowledgeScore, speed: speedScore, coherence: coherenceScore };
   const overall = Math.round((reasoningScore + codeScore + mathScore + knowledgeScore + speedScore + coherenceScore) / 6);
-  return { promptLen, responseLen, responseWords, responseTokens, latencyMs, tps: Math.round(tps * 10) / 10, codeBlocks, codeLines, inlineCode, hasFunction, hasMathSymbols, hasLatex, hasNumbers, hasEquations, reasoningWords, sentenceCount, avgSentenceLen, scores, overall, timestamp: Date.now() };
+  return { responseLen, responseWords, responseTokens, latencyMs, tps: Math.round(tps * 10) / 10, codeBlocks, codeLines, hasFunction, hasMathSymbols, hasLatex, hasNumbers, hasEquations, reasoningWords, sentenceCount, avgSentenceLen, scores, overall, timestamp: Date.now() };
 }
 
 function llmBenchmarkToDimensions(b) {
   if (!b) return null;
-  return { reasoning: b.reasoning || 70, code: b.humaneval || 0, math: Math.round((b.gsm8k + b.math) / 2), knowledge: b.mmlu || 0, speed: Math.min(100, b.speed_tps || 0), coherence: Math.round((b.mmlu + b.reasoning) / 2) };
+  return { reasoning: b.reasoning || 70, code: b.humaneval || 0, math: Math.round(((b.gsm8k || 0) + (b.math || 0)) / 2), knowledge: b.mmlu || 0, speed: Math.min(100, b.speed_tps || 0), coherence: Math.round(((b.mmlu || 0) + (b.reasoning || 70)) / 2) };
 }
 
 function llmOverallScore(b) {
@@ -444,64 +346,94 @@ function renderConnection() {
     cs.classList.remove('online'); $('#conn-text').textContent = 'offline';
     ft.classList.remove('online'); ft.innerHTML = '<span class="indicator-dot"></span> offline';
   }
-  if (state.connected || state.metrics) {
-    $('#dashboard-loading').classList.add('hidden');
-    $('#dashboard-content').classList.remove('hidden');
+}
+
+function renderLlmServerBadge() {
+  const badge = $('#llm-server-badge');
+  const text = $('#llm-server-text');
+  const keys = Object.keys(state.localLlms);
+  if (keys.length > 0) {
+    badge.classList.add('online');
+    text.textContent = state.activeLlm || keys[0];
   } else {
-    $('#dashboard-loading').classList.remove('hidden');
-    $('#dashboard-content').classList.add('hidden');
+    badge.classList.remove('online');
+    text.textContent = 'no LLM';
   }
 }
 
 function renderDeviceInfo() {
   const info = state.deviceInfo;
   if (!info) return;
-  $('#di-hostname').textContent = `${info.platform || ''} ${info.machine || ''}`.trim() || info.cpu.model;
-  $('#di-cpu').textContent = info.cpu.model;
-  $('#di-cpu').title = info.cpu.model;
-  $('#di-cores').textContent = `${info.cpu.coresPhysical}P / ${info.cpu.coresLogical}L`;
-  $('#cpu-cores-footer').textContent = `${info.cpu.coresLogical} logical cores`;
-  $('#di-ram').textContent = `${info.ram.totalGb} GB`;
-  $('#ram-total').textContent = info.ram.totalGb;
-  $('#di-disk').textContent = `${info.disk.totalGb} GB`;
-  $('#ssd-total').textContent = info.disk.totalGb;
-  const gpuAvailEl = $('#gpu-unavailable');
-  const gpuMetricsEl = $('#gpu-metrics-grid');
-  const gpuChartEl = $('#gpu-chart-card');
+  $('#dc-platform').textContent = `${info.platform || ''} ${info.platform_release || ''}`.trim();
+  $('#spec-cpu').textContent = info.cpu.model;
+  $('#spec-cpu').title = info.cpu.model;
+  $('#spec-cores').textContent = `${info.cpu.coresPhysical} physical · ${info.cpu.coresLogical} logical`;
+  $('#spec-ram').textContent = `${info.ram.totalGb} GB`;
+  $('#spec-disk').textContent = `${info.disk.totalGb} GB`;
   if (info.gpu.available) {
-    $('#di-gpu').textContent = info.gpu.name;
-    $('#di-gpu').title = info.gpu.name;
-    $('#di-gpu').classList.add('accent');
-    $('#di-gpu').classList.remove('muted');
-    $('#di-vram').textContent = `${info.gpu.vramTotalGb} GB`;
-    $('#di-vram').classList.add('accent');
-    $('#di-vram').classList.remove('muted');
-    gpuAvailEl?.classList.add('hidden');
-    gpuMetricsEl?.classList.remove('hidden');
-    gpuChartEl?.classList.remove('hidden');
+    $('#spec-gpu').textContent = info.gpu.name;
+    $('#spec-gpu').classList.add('accent');
+    $('#spec-vram').textContent = `${info.gpu.vramTotalGb} GB`;
+    $('#spec-vram').classList.add('accent');
+    // Pre-fill live metrics GPU card totals
+    $('#gpu-vram-total').textContent = info.gpu.vramTotalGb.toFixed(0);
+    $('#gpu-metric-card').classList.remove('hidden');
+    $('#gpu-chart-card').classList.remove('hidden');
   } else {
-    $('#di-gpu').textContent = 'Not detected';
-    $('#di-gpu').classList.add('muted'); $('#di-gpu').classList.remove('accent');
-    $('#di-vram').textContent = '—';
-    $('#di-vram').classList.add('muted'); $('#di-vram').classList.remove('accent');
-    gpuAvailEl?.classList.remove('hidden');
-    gpuMetricsEl?.classList.add('hidden');
-    gpuChartEl?.classList.add('hidden');
-    $('#gpu-temp-wrap').textContent = '—';
-    $('#gpu-power-wrap').textContent = '—';
+    $('#spec-gpu').textContent = 'Not detected';
+    $('#spec-gpu').classList.add('muted');
+    $('#spec-vram').textContent = '—';
+    $('#spec-vram').classList.add('muted');
+    $('#gpu-metric-card').classList.add('hidden');
+    $('#gpu-chart-card').classList.add('hidden');
   }
+  $('#spec-platform').textContent = `${info.platform} ${info.platform_release} (${info.machine})`;
+  $('#spec-python').textContent = info.python_version;
+  $('#cpu-cores-footer').textContent = `${info.cpu.coresLogical} logical cores`;
+  $('#ram-total').textContent = info.ram.totalGb;
+  $('#ssd-total').textContent = info.disk.totalGb;
+}
+
+function renderBenchmarkSource() {
+  const count = Object.keys(state.benchmarks).length;
+  $('#dc-bench-source').textContent = state.benchmarkSource;
+  $('#bench-source-text').textContent = `Loaded ${count} LLM benchmark entries from ${state.benchmarkSource}. Data refreshes hourly to stay current with leaderboard updates.`;
+}
+
+function renderLocalLlms() {
+  const list = $('#llm-servers-list');
+  const keys = Object.keys(state.localLlms);
+  if (keys.length === 0) {
+    list.innerHTML = '<div class="llm-empty">None detected. Install one of: Ollama, llama.cpp server, or LM Studio, then click Rescan.</div>';
+    return;
+  }
+  let html = '';
+  keys.forEach((k) => {
+    const srv = state.localLlms[k];
+    const isActive = k === state.activeLlm;
+    html += `
+      <div class="llm-row ${isActive ? 'active' : ''}">
+        <div class="llm-info">
+          <span class="llm-name">${escapeHtml(k)}</span>
+          <span class="llm-url">${escapeHtml(srv.base || srv.url)}</span>
+        </div>
+        ${isActive ? '<span class="llm-active-tag">active</span>' : ''}
+      </div>`;
+  });
+  list.innerHTML = html;
 }
 
 function renderMetrics() {
   if (!state.metrics) return;
   const m = state.metrics;
   $('#status-time').textContent = new Date(m.ts).toLocaleTimeString('en-US', { hour12: false });
+
   const cpuUtil = m.cpu?.utilization ?? 0;
   state.cpuUtilHistory.push(cpuUtil);
   if (state.cpuUtilHistory.length > MAX_HISTORY) state.cpuUtilHistory.shift();
   $('#cpu-util').textContent = cpuUtil.toFixed(1);
   $('#cpu-util-bar').style.width = `${cpuUtil}%`;
-  const cpuCard = $('#cpu-metrics-grid .metric-card');
+  const cpuCard = $('#tab-live .metric-card[data-accent="emerald"]');
   if (cpuCard) applyAccentClass(cpuCard, cpuUtil);
 
   if (m.gpu.available && m.gpu.utilization !== undefined) {
@@ -509,15 +441,11 @@ function renderMetrics() {
     $('#gpu-util').textContent = gpuUtil.toFixed(1);
     $('#gpu-util-bar').style.width = `${gpuUtil}%`;
     $('#gpu-vram').textContent = m.gpu.memoryUsedGb.toFixed(1);
-    $('#gpu-vram-total').textContent = m.gpu.memoryTotalGb.toFixed(0);
     const gpuMemPct = (m.gpu.memoryUsedGb / m.gpu.memoryTotalGb) * 100;
-    $('#gpu-mem').textContent = gpuMemPct.toFixed(1);
-    $('#gpu-mem-bar').style.width = `${gpuMemPct}%`;
     $('#gpu-temp-wrap').textContent = `${m.gpu.tempC.toFixed(0)}°C`;
     $('#gpu-power-wrap').textContent = `${m.gpu.powerW.toFixed(0)} W`;
-    const gpuCards = $$('#gpu-metrics-grid .metric-card');
-    if (gpuCards[0]) applyAccentClass(gpuCards[0], gpuUtil);
-    if (gpuCards[1]) applyAccentClass(gpuCards[1], gpuMemPct);
+    const gpuCard = $('#gpu-metric-card');
+    if (gpuCard) applyAccentClass(gpuCard, gpuUtil);
     const avg = state.gpuUtilHistory.length ? state.gpuUtilHistory.reduce((a, b) => a + b, 0) / state.gpuUtilHistory.length : 0;
     $('#gpu-avg').textContent = avg.toFixed(1);
     drawLineChart('#gpu-chart', state.gpuUtilHistory, '#10b981', 100);
@@ -528,7 +456,7 @@ function renderMetrics() {
   $('#ram-used').textContent = m.ram.usedGb.toFixed(2);
   $('#ram-total').textContent = m.ram.totalGb;
   $('#ram-bar').style.width = `${ramPct}%`;
-  const ramCard = $('#cpu-metrics-grid .metric-card[data-accent="amber"]');
+  const ramCard = $('#tab-live .metric-card[data-accent="amber"]');
   if (ramCard) applyAccentClass(ramCard, ramPct);
 
   const ssdPct = (m.ssd.usedGb / m.ssd.totalGb) * 100;
@@ -540,7 +468,7 @@ function renderMetrics() {
   $('#ssd-write').textContent = m.ssd.writeMbps.toFixed(0);
   $('#ssd-read-2').textContent = m.ssd.readMbps.toFixed(0);
   $('#ssd-write-2').textContent = m.ssd.writeMbps.toFixed(0);
-  const ssdCard = $('#cpu-metrics-grid .metric-card[data-accent="rose"]');
+  const ssdCard = $('#tab-live .metric-card[data-accent="rose"]');
   if (ssdCard) applyAccentClass(ssdCard, ssdPct);
 
   $('#net-rx').textContent = m.net.rxMbps.toFixed(1);
@@ -548,7 +476,6 @@ function renderMetrics() {
   $('#footer-gpu').textContent = m.gpu.available ? (m.gpu.utilization ?? 0).toFixed(0) : '—';
   $('#footer-ram').textContent = ramPct.toFixed(0);
   $('#footer-ssd').textContent = ssdPct.toFixed(0);
-  $('#footer-files').textContent = state.files.length;
   drawSparkline('#ram-spark', state.metricsHistory.map((x) => (x.ram.usedGb / x.ram.totalGb) * 100), '#06b6d4');
   drawLineChart('#ssd-chart', state.ssdReadHistory, '#f59e0b', 1000);
 }
@@ -584,89 +511,6 @@ function drawLineChart(sel, data, color, maxY) {
   svg.appendChild(line);
 }
 
-function renderRunState() {
-  const runBtn = $('#run-btn'), stopBtn = $('#stop-btn');
-  const llmFile = state.files.find((f) => f.category === 'llm');
-  const canRun = !!llmFile && ['idle', 'stopped', 'error'].includes(state.runState);
-  if (['running', 'loading'].includes(state.runState)) {
-    runBtn.classList.add('hidden'); stopBtn.classList.remove('hidden');
-    stopBtn.querySelector('span').textContent = state.runState === 'loading' ? 'Loading…' : 'Stop';
-  } else {
-    runBtn.classList.remove('hidden'); stopBtn.classList.add('hidden');
-    runBtn.disabled = !canRun;
-  }
-  const dot = $('#status-dot'), txt = $('#status-text');
-  dot.className = 'status-dot';
-  if (state.runState === 'running') { dot.classList.add('running'); txt.textContent = 'Model active'; }
-  else if (state.runState === 'loading') { dot.classList.add('loading'); txt.textContent = 'Loading model…'; }
-  else if (state.runState === 'error') { dot.classList.add('error'); txt.textContent = 'Error'; }
-  else if (state.runState === 'stopped') { txt.textContent = 'Stopped'; }
-  else { txt.textContent = 'System idle'; }
-  const badge = $('#model-badge');
-  if (state.activeModel && ['running', 'loading'].includes(state.runState)) {
-    badge.classList.remove('hidden'); $('#active-model').textContent = state.activeModel;
-    startUptime();
-  } else { badge.classList.add('hidden'); stopUptime(); }
-  $('#footer-run').textContent = state.runState;
-  const pulse = $('#chat-tab-pulse');
-  if (state.runState === 'running') pulse.classList.remove('hidden'); else pulse.classList.add('hidden');
-  const chatBadge = $('#chat-model-badge');
-  if (state.activeModel && state.runState === 'running') {
-    chatBadge.textContent = state.activeModel; chatBadge.classList.remove('hidden');
-  } else { chatBadge.classList.add('hidden'); }
-  renderChatInput();
-}
-
-function startUptime() {
-  if (state.uptimeTimer || !state.runStartedAt) return;
-  const tick = () => {
-    if (!state.runStartedAt) return;
-    const s = Math.floor((Date.now() - state.runStartedAt) / 1000);
-    $('#uptime').textContent = `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  };
-  tick(); state.uptimeTimer = setInterval(tick, 1000);
-}
-
-function stopUptime() {
-  if (state.uptimeTimer) { clearInterval(state.uptimeTimer); state.uptimeTimer = null; }
-}
-
-function renderFiles() {
-  const list = $('#file-list'), summary = $('#files-summary'), clearBtn = $('#clear-files-btn');
-  if (state.files.length === 0) {
-    list.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg><p class="empty-title">No files yet</p><p class="empty-sub">Drag &amp; drop to begin</p></div>`;
-    summary.classList.add('hidden'); clearBtn.classList.add('hidden');
-    return;
-  }
-  clearBtn.classList.remove('hidden');
-  const groups = { llm: [], dataset: [], config: [], other: [] };
-  state.files.forEach((f) => groups[f.category].push(f));
-  const totalSize = state.files.reduce((a, f) => a + f.sizeBytes, 0);
-  let summaryHtml = `<span class="chip">${state.files.length} files</span><span class="chip">${humanSize(totalSize)}</span>`;
-  if (state.activeModel) summaryHtml += `<span class="chip active-model">active: ${escapeHtml(state.activeModel)}</span>`;
-  summary.innerHTML = summaryHtml; summary.classList.remove('hidden');
-  const CATEGORY_META = {
-    llm: { label: 'LLM Models', icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>' },
-    dataset: { label: 'Datasets', icon: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>' },
-    config: { label: 'Config Files', icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>' },
-    other: { label: 'Other Files', icon: '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>' },
-  };
-  let html = '';
-  Object.entries(groups).forEach(([cat, list]) => {
-    if (list.length === 0) return;
-    const meta = CATEGORY_META[cat];
-    html += `<div class="file-group"><div class="file-group-header"><span>${meta.label}</span><span class="count">· ${list.length}</span></div><div class="file-list-items">`;
-    list.forEach((f) => {
-      const time = new Date(f.uploadedAt).toLocaleTimeString('en-US', { hour12: false });
-      html += `<div class="file-row"><span class="file-icon ${f.category}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${meta.icon}</svg></span><div class="file-info"><div class="file-name">${escapeHtml(f.name)}</div><div class="file-meta">${f.humanSize} · ${time}</div></div><button class="file-delete" data-id="${f.id}" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>`;
-    });
-    html += `</div></div>`;
-  });
-  list.innerHTML = html;
-  $$('.file-delete').forEach((b) => b.addEventListener('click', () => deleteFile(b.dataset.id)));
-  $('#footer-files').textContent = state.files.length;
-}
-
 function renderConsole() {
   const out = $('#console-output');
   $('#console-count').textContent = `${state.consoleLines.length} lines`;
@@ -685,7 +529,9 @@ function renderConsole() {
 function renderChatMessages() {
   const container = $('#chat-messages');
   if (state.chatMessages.length === 0) {
-    const sub = state.runState !== 'running' ? 'Click Run in the header to load the model first.' : 'Type a message and press Cmd/Ctrl+Enter to send.';
+    const sub = state.activeLlm
+      ? `Type a message and press Cmd/Ctrl+Enter to send. Routes to ${state.activeLlm}.`
+      : 'No local LLM detected. Install Ollama, llama.cpp, or LM Studio to test chat.';
     container.innerHTML = `<div class="chat-empty"><p class="ce-sub">${sub}</p></div>`; return;
   }
   const USER_AVATAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
@@ -705,19 +551,23 @@ function renderChatMessages() {
 
 function renderChatInput() {
   const input = $('#chat-input'), sendBtn = $('#chat-send-btn'), stopBtn = $('#chat-stop-btn');
-  if (state.runState === 'running') {
-    input.disabled = false; input.placeholder = 'Type a message… (Cmd/Ctrl+Enter to send)';
-  } else { input.disabled = true; input.placeholder = 'Run model first to chat…'; }
+  if (state.activeLlm) {
+    input.disabled = false;
+    input.placeholder = 'Type a message… (Cmd/Ctrl+Enter to send)';
+  } else {
+    input.disabled = true;
+    input.placeholder = 'Install Ollama to chat…';
+  }
   if (state.chatStreaming) {
     sendBtn.classList.add('hidden'); stopBtn.classList.remove('hidden');
   } else {
     sendBtn.classList.remove('hidden'); stopBtn.classList.add('hidden');
-    sendBtn.disabled = state.runState !== 'running' || !input.value.trim();
+    sendBtn.disabled = !state.activeLlm || !input.value.trim();
   }
 }
 
 // ===========================================================================
-// Benchmark rendering (uses live-fetched benchmarks from backend)
+// Benchmark rendering
 // ===========================================================================
 function renderBenchmark() {
   const empty = $('#benchmark-empty'), content = $('#benchmark-content'), tabPulse = $('#benchmark-tab-pulse');
@@ -770,8 +620,10 @@ function renderCompareSelect() {
   let opts = '';
   Object.entries(state.benchmarks).forEach(([key, b]) => { opts += `<option value="${key}">${b.name}</option>`; });
   sel.innerHTML = opts;
-  sel.value = state.radarCompareKey in state.benchmarks ? state.radarCompareKey : Object.keys(state.benchmarks)[0] || '';
-  state.radarCompareKey = sel.value;
+  if (!state.radarCompareKey || !(state.radarCompareKey in state.benchmarks)) {
+    state.radarCompareKey = Object.keys(state.benchmarks)[0] || null;
+  }
+  sel.value = state.radarCompareKey || '';
 }
 
 function renderRadarChart() {
@@ -846,23 +698,11 @@ function renderTestHistory() {
 }
 
 // ===========================================================================
-// Tabs + dropzone wiring
+// Tab switching
 // ===========================================================================
 function switchTab(name) {
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
-}
-
-function wireDropzone() {
-  const dz = $('#dropzone'), input = $('#file-input');
-  dz.addEventListener('click', () => input.click());
-  dz.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
-  input.addEventListener('change', () => { if (input.files.length) uploadFiles(input.files); input.value = ''; });
-  ['dragenter', 'dragover'].forEach((evt) => dz.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add('drag-over'); }));
-  ['dragleave', 'drop'].forEach((evt) => dz.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag-over'); }));
-  dz.addEventListener('drop', (e) => { if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files); });
-  window.addEventListener('dragover', (e) => e.preventDefault());
-  window.addEventListener('drop', (e) => { e.preventDefault(); if (e.dataTransfer.files?.length && !dz.contains(e.target)) uploadFiles(e.dataTransfer.files); });
 }
 
 // ===========================================================================
@@ -870,11 +710,8 @@ function wireDropzone() {
 // ===========================================================================
 async function init() {
   connectSocket();
-  wireDropzone();
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
-  $('#run-btn').addEventListener('click', handleRun);
-  $('#stop-btn').addEventListener('click', handleStop);
-  $('#clear-files-btn').addEventListener('click', clearAllFiles);
+  $('#rescan-btn').addEventListener('click', rescanLocalLlms);
   $('#clear-console-btn').addEventListener('click', () => { state.consoleLines = []; renderConsole(); });
   $('#chat-input').addEventListener('input', renderChatInput);
   $('#chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendMessage(); } });
@@ -888,12 +725,12 @@ async function init() {
   await fetchDeviceInfo();
   await fetchBenchmarks();
   await fetchLocalLlms();
-  await refreshFiles();
 
   renderConnection();
   renderDeviceInfo();
-  renderFiles();
-  renderRunState();
+  renderBenchmarkSource();
+  renderLocalLlms();
+  renderLlmServerBadge();
   renderConsole();
   renderChatMessages();
   renderChatInput();
