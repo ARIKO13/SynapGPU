@@ -85,6 +85,10 @@ class SessionState:
     run_started_at: float | None = None
     active_model: str | None = None
     chat_active: bool = False
+    # Which GPU source the user picked in the frontend toggle:
+    # 'webgl' (real device hardware) or 'webgpu' (Chrome adapter).
+    # Defaults to None — frontend decides on load and sends via WS.
+    gpu_source: str | None = None
 
 
 session = SessionState()
@@ -562,6 +566,44 @@ def on_run_stop(_data=None):
 @socketio.on("chat:active")
 def on_chat_active(data):
     session.chat_active = bool(data)
+
+
+@socketio.on("device:gpusource")
+def on_device_gpusource(data):
+    """Frontend notifies backend of which GPU source the user picked
+    ('webgpu' for Chrome adapter, 'webgl' for device hardware). The
+    backend logs it and stores it in session so future metrics broadcasts
+    can include the user's GPU source choice if needed."""
+    source = data if isinstance(data, str) else (data or {}).get("source", "webgl")
+    print(f"[device] GPU source switched to: {source}")
+    session.gpu_source = source
+    socketio.emit("device:gpusource:ack", {"source": source}, to=request.sid)
+
+
+@socketio.on("device:gpuinfo")
+def on_device_gpuinfo(data):
+    """Frontend can optionally send the GPU info it detected via WebGPU /
+    WebGL (since browser has more visibility into actual graphics stack
+    than the backend). The backend merges this into DEVICE_INFO so the
+    next /api/device-info call returns the frontend's view too."""
+    if not isinstance(data, dict):
+        return
+    print(f"[device] Frontend GPU info received: {data.get('description', '?')}")
+    # Stash the frontend-provided GPU info on DEVICE_INFO so /api/device-info
+    # reflects what the browser sees, not just what nvidia-smi sees.
+    global DEVICE_INFO
+    if DEVICE_INFO:
+        DEVICE_INFO["gpu_browser"] = data
+        # If the backend has no GPU of its own (no nvidia-smi) but the
+        # browser detected one (e.g. via WebGL), promote that to the
+        # primary gpu entry so the dashboard shows it.
+        if not DEVICE_INFO.get("gpu", {}).get("available") and data.get("available"):
+            DEVICE_INFO["gpu"] = {
+                "available": True,
+                "name": data.get("description") or data.get("vendor") or "Browser-detected GPU",
+                "vramTotalGb": 0,  # VRAM not exposed by browser APIs
+                "source": "browser",
+            }
 
 
 # ----- Background metrics broadcaster ------------------------------------
