@@ -291,21 +291,43 @@
 
           <!-- WebGPU model loader -->
           <div class="llm-loader">
-            <div class="llm-loader-row">
-              <label for="model-select" class="llm-label">Model</label>
-              <select id="model-select" class="llm-select">
-                <option value="SmolLM2-360M-Instruct-q4f16_1-MLC">SmolLM2 360M (~250MB) — fast</option>
-                <option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM2 1.7B (~1GB) — better</option>
-                <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen2.5 0.5B (~400MB)</option>
-                <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (~1GB)</option>
-                <option value="Llama-3.2-1B-Instruct-q4f32_1-MLC">Llama 3.2 1B (~936MB)</option>
-                <option value="Llama-3.2-3B-Instruct-q4f32_1-MLC">Llama 3.2 3B (~2.8GB)</option>
-              </select>
-              <button id="load-model-btn" class="btn btn-primary">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
-                <span>Load via WebGPU</span>
-              </button>
+            <div class="llm-tabs">
+              <button class="llm-tab active" data-mode="preset">Preset Models</button>
+              <button class="llm-tab" data-mode="custom">Upload .gguf</button>
             </div>
+
+            <!-- Preset mode: pick from pre-built models -->
+            <div id="llm-preset" class="llm-mode">
+              <div class="llm-loader-row">
+                <label for="model-select" class="llm-label">Model</label>
+                <select id="model-select" class="llm-select">
+                  <option value="SmolLM2-360M-Instruct-q4f16_1-MLC">SmolLM2 360M (~250MB) — fast</option>
+                  <option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM2 1.7B (~1GB) — better</option>
+                  <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen2.5 0.5B (~400MB)</option>
+                  <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (~1GB)</option>
+                  <option value="Llama-3.2-1B-Instruct-q4f32_1-MLC">Llama 3.2 1B (~936MB)</option>
+                  <option value="Llama-3.2-3B-Instruct-q4f32_1-MLC">Llama 3.2 3B (~2.8GB)</option>
+                </select>
+                <button id="load-model-btn" class="btn btn-primary">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+                  <span>Load via WebGPU</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Custom mode: upload any .gguf file -->
+            <div id="llm-custom" class="llm-mode hidden">
+              <div class="custom-upload-area" id="custom-dropzone">
+                <input type="file" id="custom-file-input" accept=".gguf,.bin,.safetensors,.onnx" hidden />
+                <div class="custom-drop-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <p class="custom-drop-text">Drop your .gguf file here</p>
+                <p class="custom-drop-sub">or click to browse · any GGUF model works</p>
+                <p class="custom-drop-hint">Runs via wllama (WebAssembly llama.cpp) — your custom trained LLM, fine-tuned model, or any quantized GGUF</p>
+              </div>
+            </div>
+
             <div id="load-progress" class="load-progress hidden">
               <div class="lp-header">
                 <span id="lp-text" class="lp-text">Loading…</span>

@@ -632,9 +632,86 @@ function handleStop() {
 let webllmEngine = null;
 let webllmLib = null;
 let activeModelId = null;
+let wllamaInstance = null;
+let llmMode = 'preset'; // 'preset' (web-llm) or 'custom' (wllama)
 
 const SYSTEM_PROMPT = "You are a helpful AI assistant running in the user's browser via WebGPU. Answer questions clearly and concisely.";
 
+// --- Tab switcher: Preset vs Custom upload ---
+function setLlmMode(mode) {
+  llmMode = mode;
+  $$('.llm-tab').forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
+  $('#llm-preset').classList.toggle('hidden', mode !== 'preset');
+  $('#llm-custom').classList.toggle('hidden', mode !== 'custom');
+}
+
+// --- Custom .gguf file loading via wllama ---
+async function loadCustomGguf(file) {
+  const progressEl = $('#load-progress');
+  const lpText = $('#lp-text');
+  const lpPercent = $('#lp-percent');
+  const lpBar = $('#lp-bar');
+
+  if (!file) return;
+  if (!file.name.match(/\.(gguf|bin)$/i)) {
+    $('#chat-error').textContent = 'Please select a .gguf or .bin model file.';
+    $('#chat-error').classList.remove('hidden');
+    log('Invalid file type: ' + file.name, 'error');
+    return;
+  }
+
+  progressEl.classList.remove('hidden');
+  lpText.textContent = 'Loading wllama library…';
+  lpPercent.textContent = '0%';
+  lpBar.style.width = '0%';
+
+  try {
+    // Dynamically import wllama from CDN
+    const wllamaModule = await import('https://esm.run/wllama');
+    const Wllama = wllamaModule.default || wllamaModule.Wllama;
+
+    // wllama needs the wasm binary — configure with CDN paths
+    const CONFIG_PATHS = {
+      'wllama.wasm': 'https://cdn.jsdelivr.net/npm/wllama/esm/wllama.wasm',
+      'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/wllama/esm/single-thread/wllama.wasm',
+      'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/wllama/esm/multi-thread/wllama.wasm',
+      'multi-thread/wllama.worker.mjs': 'https://cdn.jsdelivr.net/npm/wllama/esm/multi-thread/wllama.worker.mjs',
+    };
+
+    lpText.textContent = 'Initializing wllama…';
+    wllamaInstance = new Wllama(CONFIG_PATHS, {
+      progressCallback: ({ loaded, total }) => {
+        if (total > 0) {
+          const pct = Math.round((loaded / total) * 100);
+          lpPercent.textContent = pct + '%';
+          lpBar.style.width = pct + '%';
+        }
+      },
+    });
+
+    lpText.textContent = 'Loading ' + file.name + ' (' + humanSize(file.size) + ')…';
+    log('Loading custom model: ' + file.name + ' (' + humanSize(file.size) + ')', 'info');
+
+    // Load the .gguf file from the File object
+    await wllamaInstance.loadFromBinary(file, {
+      n_ctx: 4096,       // context length
+      n_threads: navigator.hardwareConcurrency || 4,
+      // wllama auto-detects quantization from the gguf metadata
+    });
+
+    activeModelId = file.name;
+    log('Custom model loaded: ' + file.name, 'success');
+    onModelReady(file.name);
+  } catch (e) {
+    log('Failed to load custom model: ' + e.message, 'error');
+    $('#chat-error').textContent = 'Load failed: ' + e.message + '\n\nMake sure the file is a valid GGUF model. wllama supports most llama.cpp-compatible GGUF files.';
+    $('#chat-error').classList.remove('hidden');
+    progressEl.classList.add('hidden');
+    wllamaInstance = null;
+  }
+}
+
+// --- Preset model loading via web-llm ---
 async function loadWebLLM() {
   const loadBtn = $('#load-model-btn');
   const select = $('#model-select');
@@ -756,7 +833,7 @@ function onModelReady(modelId) {
 async function sendMessage() {
   const input = $('#chat-input');
   const text = input.value.trim();
-  if (!text || !webllmEngine || state.chatStreaming) return;
+  if (!text || (!webllmEngine && !wllamaInstance) || state.chatStreaming) return;
 
   const userMsg = { id: uid(), role: 'user', content: text, ts: Date.now() };
   const assistantId = uid();
@@ -777,23 +854,45 @@ async function sendMessage() {
       .filter((m) => m.id !== assistantId && m.role !== 'system')
       .map((m) => ({ role: m.role, content: m.content }));
 
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...history,
-    ];
+    if (wllamaInstance) {
+      // --- Custom .gguf via wllama ---
+      // wllama uses llama.cpp chat format — build prompt from messages
+      const prompt = wllamaInstance.formatChat(history, { system: SYSTEM_PROMPT });
+      const result = await wllamaInstance.createCompletion(prompt, {
+        nPredict: 512,
+        temperature: 0.7,
+        streaming: true,
+      });
 
-    const stream = await webllmEngine.chat.completions.create({
-      messages,
-      stream: true,
-      temperature: 0.7,
-    });
+      // wllama streaming: we get an async iterator of text chunks
+      for await (const chunk of result) {
+        const token = chunk || '';
+        if (token) {
+          const msg = state.chatMessages.find((m) => m.id === assistantId);
+          if (msg) msg.content += token;
+          renderChatMessages();
+        }
+      }
+    } else if (webllmEngine) {
+      // --- Preset model via web-llm ---
+      const messages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...history,
+      ];
 
-    for await (const chunk of stream) {
-      const token = chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content;
-      if (token) {
-        const msg = state.chatMessages.find((m) => m.id === assistantId);
-        if (msg) msg.content += token;
-        renderChatMessages();
+      const stream = await webllmEngine.chat.completions.create({
+        messages,
+        stream: true,
+        temperature: 0.7,
+      });
+
+      for await (const chunk of stream) {
+        const token = chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content;
+        if (token) {
+          const msg = state.chatMessages.find((m) => m.id === assistantId);
+          if (msg) msg.content += token;
+          renderChatMessages();
+        }
       }
     }
 
@@ -824,8 +923,12 @@ async function sendMessage() {
 }
 
 function stopChat() {
+  // Stop both engines
   if (webllmEngine && state.chatStreaming) {
     try { webllmEngine.interruptGenerate(); } catch (e) {}
+  }
+  if (wllamaInstance && state.chatStreaming) {
+    try { wllamaInstance.abortCompletion(); } catch (e) {}
   }
   state.chatStreaming = false;
   state.chatMessages.forEach((m) => { if (m.streaming) m.streaming = false; });
@@ -1362,7 +1465,7 @@ function renderChatInput() {
   const input = $('#chat-input');
   const sendBtn = $('#chat-send-btn');
   const stopBtn = $('#chat-stop-btn');
-  if (webllmEngine) {
+  if (webllmEngine || wllamaInstance) {
     input.disabled = false;
     input.placeholder = 'Type a message… (Cmd/Ctrl+Enter to send)';
   } else {
@@ -1375,7 +1478,7 @@ function renderChatInput() {
   } else {
     sendBtn.classList.remove('hidden');
     stopBtn.classList.add('hidden');
-    sendBtn.disabled = !webllmEngine || !input.value.trim();
+    sendBtn.disabled = !(webllmEngine || wllamaInstance) || !input.value.trim();
   }
 }
 
@@ -1739,6 +1842,27 @@ async function init() {
   $('#chat-stop-btn').addEventListener('click', stopChat);
   $('#clear-chat-btn').addEventListener('click', clearChat);
   $('#load-model-btn').addEventListener('click', loadWebLLM);
+
+  // LLM mode tabs
+  $$('.llm-tab').forEach((t) => t.addEventListener('click', () => setLlmMode(t.dataset.mode)));
+
+  // Custom .gguf upload
+  const customDz = $('#custom-dropzone');
+  const customInput = $('#custom-file-input');
+  customDz.addEventListener('click', () => customInput.click());
+  customInput.addEventListener('change', () => {
+    if (customInput.files.length) loadCustomGguf(customInput.files[0]);
+    customInput.value = '';
+  });
+  ['dragenter', 'dragover'].forEach((evt) => {
+    customDz.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); customDz.classList.add('drag-over'); });
+  });
+  ['dragleave', 'drop'].forEach((evt) => {
+    customDz.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); customDz.classList.remove('drag-over'); });
+  });
+  customDz.addEventListener('drop', (e) => {
+    if (e.dataTransfer.files?.length) loadCustomGguf(e.dataTransfer.files[0]);
+  });
   $('#radar-compare-select').addEventListener('change', (e) => {
     state.radarCompareKey = e.target.value;
     renderRadarChart();

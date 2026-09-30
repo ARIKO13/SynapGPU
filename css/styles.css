@@ -1363,6 +1363,96 @@ html, body {
   display: none;
 }
 
+/* LLM mode tabs (Preset vs Custom upload) */
+.llm-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 0.625rem;
+  background: var(--bg-elev-2);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.llm-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font-sans);
+}
+.llm-tab:hover:not(.active) {
+  color: var(--text-2);
+  background: var(--bg-hover);
+}
+.llm-tab.active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-border);
+}
+.llm-mode.hidden { display: none; }
+
+/* Custom .gguf upload area */
+.custom-upload-area {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  background: var(--bg);
+}
+.custom-upload-area:hover, .custom-upload-area.drag-over {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+.custom-drop-icon {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 0.5rem;
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+}
+.custom-upload-area:hover .custom-drop-icon,
+.custom-upload-area.drag-over .custom-drop-icon {
+  border-color: var(--accent-border);
+}
+.custom-drop-icon svg {
+  width: 18px; height: 18px;
+  color: var(--text-muted);
+}
+.custom-upload-area:hover .custom-drop-icon svg,
+.custom-upload-area.drag-over .custom-drop-icon svg {
+  color: var(--accent-text);
+}
+.custom-drop-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: 2px;
+}
+.custom-drop-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+.custom-drop-hint {
+  font-size: 10px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
 /* ============================================================
    Benchmark
    ============================================================ */
