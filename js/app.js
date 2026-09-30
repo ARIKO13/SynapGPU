@@ -746,7 +746,8 @@ async function loadCustomGguf(file) {
     lpText.textContent = 'Loading ' + file.name + ' (' + humanSize(file.size) + ')…';
     log('Loading custom model: ' + file.name + ' (' + humanSize(file.size) + ')', 'info');
 
-    await wllamaInstance.loadModel(file, {
+    // wllama v3 API: loadModel expects array of Blobs, not single File
+    await wllamaInstance.loadModel([file], {
       n_ctx: 4096,
       n_threads: navigator.hardwareConcurrency || 4,
     });
