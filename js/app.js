@@ -44,6 +44,10 @@ const state = {
   radarCompareKey: 'gpt4',
   // Real device info — detected on load
   deviceInfo: null,
+  // GPU source selection — 'webgl' (real device hardware) or 'webgpu' (Chrome's adapter).
+  // Default is 'webgl' since it gives the actual hardware GPU name (RTX 4060 / Iris / Apple M2)
+  // rather than a software fallback that WebGPU may report.
+  gpuSource: null,
   // CPU benchmark state (for live utilization estimate)
   cpuBenchmarkResult: 0,
   cpuBenchmarkPrev: 0,
@@ -94,6 +98,11 @@ function log(text, level = 'info') {
 /**
  * Detect GPU via WebGPU API. Returns adapter info if WebGPU is supported,
  * else null. Falls back gracefully — many older devices don't have WebGPU.
+ *
+ * Note: WebGPU's "GPU" is the one Chrome/Edge exposes for compute, which
+ * may be SwiftShader (software) on devices without a real GPU, or a
+ * different adapter than what the OS reports. For the actual hardware GPU
+ * name (RTX 4060, Intel Iris, Apple M2), use detectGPUViaWebGL().
  */
 async function detectGPU() {
   if (!('gpu' in navigator)) {
@@ -104,8 +113,6 @@ async function detectGPU() {
     if (!adapter) {
       return { available: false, reason: 'No compatible GPU adapter found' };
     }
-    // adapter.requestAdapterInfo() is the standard way to get vendor/device.
-    // Some browsers (older Chrome) don't have it; fall back to adapter.info.
     let info = null;
     try {
       info = adapter.info || (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : null);
@@ -113,7 +120,6 @@ async function detectGPU() {
       info = null;
     }
     if (!info) {
-      // Best-effort: get whatever the adapter exposes.
       return {
         available: true,
         vendor: 'Unknown',
@@ -132,6 +138,69 @@ async function detectGPU() {
     };
   } catch (e) {
     return { available: false, reason: `WebGPU error: ${e.message}` };
+  }
+}
+
+/**
+ * Detect GPU via WebGL UNMASKED_RENDERER — this gives the ACTUAL hardware
+ * GPU name as reported by the browser's graphics stack.
+ *
+ * Examples returned by real devices:
+ *   - "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 ...)"
+ *   - "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics ...)"
+ *   - "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, ...)"
+ *   - "Mali-G78"  (Android)
+ *
+ * This is more representative of the user's actual device hardware than
+ * WebGPU's adapter info, which may report a software fallback.
+ *
+ * Note: Some browsers (Firefox with privacy resistFingerprinting, Safari
+ * without the extension) may mask this. Best-effort detection.
+ */
+function detectGPUViaWebGL() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    if (!gl) {
+      return { available: false, reason: 'WebGL not supported in this browser' };
+    }
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    if (!debugInfo) {
+      // No debug extension — try gl.getParameter(gl.RENDERER) as a fallback
+      const fallbackRenderer = gl.getParameter(gl.RENDERER) || 'Unknown WebGL renderer';
+      const fallbackVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
+      return {
+        available: true,
+        vendor: fallbackVendor,
+        renderer: fallbackRenderer,
+        description: fallbackRenderer,
+        masked: true,
+      };
+    }
+    const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+    const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+    if (!renderer) {
+      return { available: false, reason: 'Renderer string unavailable' };
+    }
+    // Parse "ANGLE (Vendor, Model Name, ...)" format used by Chrome on
+    // Windows/Linux to extract a clean GPU name.
+    let cleanName = renderer;
+    let cleanVendor = vendor;
+    const angleMatch = renderer.match(/^ANGLE\s*\(([^,]+),\s*([^,)]+?)(?:,|\))/);
+    if (angleMatch) {
+      cleanVendor = angleMatch[1].trim();
+      cleanName = angleMatch[2].trim();
+    }
+    return {
+      available: true,
+      vendor: cleanVendor,
+      renderer,
+      description: cleanName,
+      rawRenderer: renderer,
+      rawVendor: vendor,
+    };
+  } catch (e) {
+    return { available: false, reason: `WebGL error: ${e.message}` };
   }
 }
 
@@ -293,6 +362,10 @@ async function detectBattery() {
  * Master device info — calls all detectors and assembles the result.
  * Uses Promise.allSettled so a failure in one detector (e.g. Battery API
  * not supported) doesn't break the others.
+ *
+ * Detects GPU via BOTH WebGPU and WebGL so the user can pick which source
+ * to display in the dashboard (WebGPU = what Chrome reports as GPU;
+ * WebGL = actual hardware GPU name like RTX 4060 / Intel Iris / Apple M2).
  */
 async function detectDeviceInfo() {
   log('Detecting device specs…', 'info');
@@ -302,7 +375,9 @@ async function detectDeviceInfo() {
     detectStorage(),
     detectBattery(),
   ]);
-  const gpu = results[0].status === 'fulfilled' ? results[0].value : { available: false, reason: 'detection failed' };
+  const gpuWebGPU = results[0].status === 'fulfilled' ? results[0].value : { available: false, reason: 'detection failed' };
+  // WebGL detection is synchronous (no Promise), so run it directly.
+  const gpuWebGL = detectGPUViaWebGL();
   const cpu = results[1].status === 'fulfilled' ? results[1].value : detectCPU();
   const storage = results[2].status === 'fulfilled' ? results[2].value : { unavailable: true };
   const battery = results[3].status === 'fulfilled' ? results[3].value : { unavailable: true };
@@ -315,18 +390,46 @@ async function detectDeviceInfo() {
     pixelRatio: window.devicePixelRatio,
   };
 
+  // Pick the default GPU source: prefer WebGL (real hardware name) over
+  // WebGPU (may report software fallback). User can switch in the UI.
+  let defaultSource = 'webgl';
+  if (!gpuWebGL.available && gpuWebGPU.available) defaultSource = 'webgpu';
+  // Persist selection if user has already picked before re-detection
+  if (state.gpuSource) defaultSource = state.gpuSource;
+
   const info = {
-    cpu, ram, disk: storage, gpu, network, battery, screen,
+    cpu, ram, disk: storage, network, battery, screen,
+    gpu: {
+      // The active GPU object (the one currently selected for display).
+      // Will be one of gpuWebGPU or gpuWebGL depending on state.gpuSource.
+      ...gpuWebGL,  // default
+    },
+    gpuWebGPU,  // WebGPU API source
+    gpuWebGL,   // WebGL UNMASKED_RENDERER source (actual hardware)
+    gpuSources: {
+      webgpu: gpuWebGPU,
+      webgl: gpuWebGL,
+    },
     userAgent: navigator.userAgent,
     browser: detectBrowser(),
     language: navigator.language,
     online: navigator.onLine,
   };
+  state.deviceInfo = info;
+  state.gpuSource = defaultSource;
+  // Sync the active GPU to the selected source
+  info.gpu = info.gpuSources[defaultSource] || gpuWebGL;
 
-  if (gpu.available) {
-    log(`GPU detected: ${gpu.description}`, 'success');
+  // Log what we found
+  if (gpuWebGPU.available) {
+    log(`WebGPU GPU: ${gpuWebGPU.description}`, 'success');
   } else {
-    log(`GPU: ${gpu.reason || 'not available'}`, 'warn');
+    log(`WebGPU: ${gpuWebGPU.reason || 'not available'}`, 'warn');
+  }
+  if (gpuWebGL.available) {
+    log(`WebGL GPU: ${gpuWebGL.description}`, 'success');
+  } else {
+    log(`WebGL: ${gpuWebGL.reason || 'not available'}`, 'warn');
   }
   log(`CPU: ${cpu.model} (${cpu.coresLogical} cores)`, 'info');
   log(`RAM: ${ram.displayTotal}${ram.cappedAtBrowser ? ' (capped at 8GB by browser)' : ''}`, 'info');
@@ -340,6 +443,16 @@ async function detectDeviceInfo() {
     log(`Battery: ${battery.level}%${battery.charging ? ' (charging)' : ''}`, 'info');
   }
   return info;
+}
+
+/** Switch active GPU source — called by the toggle in the Device card. */
+function setGpuSource(source) {
+  if (!state.deviceInfo?.gpuSources?.[source]) return;
+  state.gpuSource = source;
+  state.deviceInfo.gpu = state.deviceInfo.gpuSources[source];
+  log(`GPU source: ${source === 'webgpu' ? 'WebGPU (Chrome)' : 'WebGL (device hardware)'}`, 'info');
+  renderDeviceInfo();
+  renderMetrics();
 }
 
 function detectBrowser() {
@@ -840,30 +953,50 @@ function renderDeviceInfo() {
     $('#ssd-total').textContent = 0;
   }
 
-  // GPU
+  // GPU (uses the currently-selected source — see setGpuSource())
   const gpuAvailEl = $('#gpu-unavailable');
   const gpuMetricsEl = $('#gpu-metrics-grid');
   const gpuChartEl = $('#gpu-chart-card');
   if (info.gpu.available) {
-    $('#di-gpu').textContent = info.gpu.description || 'WebGPU GPU';
-    $('#di-gpu').title = info.gpu.description || '';
+    $('#di-gpu').textContent = info.gpu.description || 'GPU';
+    $('#di-gpu').title = info.gpu.rawRenderer || info.gpu.description || '';
     $('#di-gpu').classList.add('accent');
-    $('#di-vram').textContent = info.gpu.architecture !== 'Unknown' ? info.gpu.architecture : 'WebGPU';
+    $('#di-gpu').classList.remove('muted');
+    // For WebGPU we have architecture; for WebGL we show vendor
+    let vramText = '—';
+    if (state.gpuSource === 'webgpu' && info.gpu.architecture && info.gpu.architecture !== 'Unknown') {
+      vramText = info.gpu.architecture;
+    } else if (state.gpuSource === 'webgl' && info.gpu.vendor && info.gpu.vendor !== 'Unknown') {
+      vramText = info.gpu.vendor;
+    }
+    $('#di-vram').textContent = vramText;
     $('#di-vram').classList.add('accent');
+    $('#di-vram').classList.remove('muted');
     gpuAvailEl?.classList.add('hidden');
     gpuMetricsEl?.classList.remove('hidden');
     gpuChartEl?.classList.remove('hidden');
   } else {
     $('#di-gpu').textContent = 'Not detected';
     $('#di-gpu').classList.add('muted');
+    $('#di-gpu').classList.remove('accent');
     $('#di-vram').textContent = '—';
     $('#di-vram').classList.add('muted');
+    $('#di-vram').classList.remove('accent');
     gpuAvailEl?.classList.remove('hidden');
     gpuMetricsEl?.classList.add('hidden');
     gpuChartEl?.classList.add('hidden');
     $('#gpu-temp-wrap').textContent = '—';
     $('#gpu-power-wrap').textContent = '—';
   }
+
+  // Sync toggle button states with the active source
+  $$('.gst-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.source === state.gpuSource);
+    // Disable buttons for sources that aren't available
+    const srcKey = btn.dataset.source;
+    const srcInfo = info.gpuSources?.[srcKey];
+    btn.disabled = !srcInfo || !srcInfo.available;
+  });
 }
 
 function renderMetrics() {
@@ -1500,6 +1633,13 @@ async function init() {
     state.benchmarkResults = [];
     renderBenchmark();
     log('Benchmark cleared.', 'info');
+  });
+
+  // GPU source toggle — let user pick WebGPU (Chrome) vs WebGL (device)
+  $$('.gst-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!btn.disabled) setGpuSource(btn.dataset.source);
+    });
   });
 
   renderConnection();

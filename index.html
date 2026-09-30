@@ -167,6 +167,19 @@
                   <span id="di-vram" class="di-value">—</span>
                 </div>
               </div>
+              <div class="gpu-source-toggle" id="gpu-source-toggle">
+                <span class="gst-label">GPU source</span>
+                <div class="gst-buttons">
+                  <button type="button" class="gst-btn" data-source="webgpu">
+                    <span class="gst-name">WebGPU</span>
+                    <span class="gst-hint">Chrome adapter</span>
+                  </button>
+                  <button type="button" class="gst-btn active" data-source="webgl">
+                    <span class="gst-name">WebGL</span>
+                    <span class="gst-hint">Device hardware</span>
+                  </button>
+                </div>
+              </div>
             </div>
             <div id="gpu-unavailable" class="gpu-unavailable hidden">
               <div class="gu-icon">
