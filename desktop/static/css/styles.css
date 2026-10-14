@@ -12,8 +12,9 @@
   --text-2: #999999;
   --text-3: #666666;
   --text-4: #444444;
-  --accent: #10b981;
-  --accent-bg: rgba(16, 185, 129, 0.08);
+  --accent: #6366f1;
+  --accent-bg: rgba(99, 102, 241, 0.1);
+  --accent-hover: #818cf8;
   --warn: #f59e0b;
   --danger: #ef4444;
   --info: #3b82f6;
@@ -46,11 +47,11 @@ html, body {
 }
 .brand { display: flex; align-items: center; gap: 8px; }
 .logo {
-  width: 24px; height: 24px; border-radius: 5px;
+  width: 18px; height: 18px; border-radius: 4px;
   background: var(--accent);
   display: flex; align-items: center; justify-content: center;
 }
-.logo svg { width: 14px; height: 14px; color: #000; }
+.logo svg { width: 10px; height: 10px; color: #000; }
 .brand-name { font-size: 13px; font-weight: 600; }
 .brand-tag { font-size: 10px; color: var(--text-3); }
 .header-right { display: flex; align-items: center; gap: 8px; }
@@ -63,6 +64,7 @@ html, body {
 }
 .conn-pill.online { color: var(--accent); background: var(--accent-bg); border-color: var(--accent); }
 .conn-pill svg { display: none; }
+.conn-pill svg { width: 10px; height: 10px; }
 
 /* Buttons */
 .btn {
@@ -73,7 +75,7 @@ html, body {
   font-family: var(--sans); transition: opacity 0.1s;
 }
 .btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.btn svg { width: 12px; height: 12px; }
+.btn svg { width: 10px; height: 10px; }
 .btn-primary { background: var(--accent); color: #000; }
 .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
 .btn-icon { width: 28px; padding: 0; justify-content: center; }
@@ -155,7 +157,7 @@ html, body {
   width: 18px; height: 18px; border-radius: 3px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.file-icon svg { width: 10px; height: 10px; }
+.file-icon svg { width: 8px; height: 8px; }
 .file-icon.llm { background: var(--accent-bg); color: var(--accent); }
 .file-icon.notebook { background: rgba(245, 158, 11, 0.1); color: var(--warn); }
 .file-icon.dataset { background: rgba(59, 130, 246, 0.1); color: var(--info); }
@@ -169,7 +171,7 @@ html, body {
 }
 .file-row:hover .file-delete { opacity: 1; }
 .file-delete:hover { color: var(--danger); }
-.file-delete svg { width: 12px; height: 12px; }
+.file-delete svg { width: 10px; height: 10px; }
 
 .empty-state { text-align: center; padding: 24px 8px; color: var(--text-4); font-size: 11px; }
 
@@ -192,7 +194,7 @@ html, body {
 }
 .tab:hover { color: var(--text-2); }
 .tab.active { color: var(--text); border-bottom-color: var(--accent); }
-.tab svg { width: 12px; height: 12px; }
+.tab svg { width: 10px; height: 10px; }
 
 .tab-panel { display: none; flex: 1; overflow: hidden; }
 .tab-panel.active { display: flex; flex-direction: column; }
@@ -249,7 +251,7 @@ html, body {
 .metric-card { background: var(--bg-1); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; }
 .metric-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
 .metric-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
-.metric-icon { width: 12px; height: 12px; color: var(--text-4); }
+.metric-icon { width: 10px; height: 10px; color: var(--text-4); }
 .metric-value { font-family: var(--mono); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .metric-sub { font-size: 10px; color: var(--text-3); font-family: var(--mono); }
 .metric-progress { height: 2px; background: var(--bg-2); border-radius: 1px; margin-top: 4px; overflow: hidden; }
@@ -342,8 +344,8 @@ html, body {
 .custom-file-row { display: flex; align-items: center; gap: 6px; padding: 5px 6px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
 .custom-file-row:hover { border-color: var(--accent); }
 .custom-file-row.disabled { opacity: 0.5; cursor: not-allowed; }
-.custom-file-icon { width: 20px; height: 20px; border-radius: 3px; background: var(--accent-bg); color: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.custom-file-icon svg { width: 10px; height: 10px; }
+.custom-file-icon { width: 16px; height: 16px; border-radius: 3px; background: var(--accent-bg); color: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.custom-file-icon svg { width: 8px; height: 8px; }
 .custom-file-info { flex: 1; min-width: 0; }
 .custom-file-name { font-size: 11px; font-weight: 500; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .custom-file-meta { font-size: 9px; color: var(--text-4); font-family: var(--mono); }
@@ -363,10 +365,10 @@ html, body {
 .ce-sub { font-size: 12px; color: var(--text-3); text-align: center; }
 .chat-message { display: flex; gap: 6px; }
 .chat-message.user { flex-direction: row-reverse; }
-.chat-avatar { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.chat-avatar { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .chat-avatar.user { background: var(--bg-2); color: var(--text-3); }
 .chat-avatar.assistant { background: var(--accent-bg); color: var(--accent); }
-.chat-avatar svg { width: 12px; height: 12px; }
+.chat-avatar svg { width: 10px; height: 10px; }
 .chat-bubble-wrap { max-width: 75%; display: flex; flex-direction: column; gap: 1px; }
 .chat-message.user .chat-bubble-wrap { align-items: flex-end; }
 .chat-bubble { padding: 5px 8px; border-radius: 6px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
@@ -459,8 +461,8 @@ html, body {
 
 /* GPU unavailable */
 .gpu-unavailable { display: flex; gap: 8px; padding: 8px 10px; background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.15); border-radius: 4px; }
-.gu-icon { width: 24px; height: 24px; border-radius: 50%; background: rgba(245, 158, 11, 0.1); color: var(--warn); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.gu-icon svg { width: 12px; height: 12px; }
+.gu-icon { width: 20px; height: 20px; border-radius: 50%; background: rgba(245, 158, 11, 0.1); color: var(--warn); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.gu-icon svg { width: 10px; height: 10px; }
 .gu-content { flex: 1; }
 .gu-title { font-size: 12px; font-weight: 600; color: var(--text); }
 .gu-sub { font-size: 11px; color: var(--text-3); line-height: 1.4; }
