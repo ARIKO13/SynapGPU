@@ -727,9 +727,8 @@ html, body {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
+  overflow-wrap: break-word;
   font-family: var(--font-mono);
 }
 .di-value.muted { color: var(--text-faint); }
@@ -1978,9 +1977,8 @@ html, body {
 .mds-row-label {
   color: var(--text-2);
   font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .mds-row-tag {
   font-size: 9px;
