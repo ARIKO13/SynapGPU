@@ -256,6 +256,22 @@
               </div>
               <svg id="gpu-chart" class="chart" viewBox="0 0 800 100" preserveAspectRatio="none"></svg>
             </div>
+            <!-- Multi-GPU details (all GPUs on the system) -->
+            <div id="multi-gpu-section" class="multi-device-section hidden">
+              <div class="mds-header">
+                <span class="mds-title">All GPUs</span>
+                <span id="gpu-count-badge" class="mds-count">0</span>
+              </div>
+              <div id="multi-gpu-list" class="mds-list"></div>
+            </div>
+            <!-- Multi-disk details (all storage partitions) -->
+            <div id="multi-disk-section" class="multi-device-section hidden">
+              <div class="mds-header">
+                <span class="mds-title">All Storage</span>
+                <span id="disk-count-badge" class="mds-count">0</span>
+              </div>
+              <div id="multi-disk-list" class="mds-list"></div>
+            </div>
           </div>
         </section>
 
@@ -435,6 +451,6 @@
   </div>
 
   <script src="/static/js/socket.io.min.js"></script>
-  <script src="/static/js/app.js?v=040"></script>
+  <script src="/static/js/app.js?v=041"></script>
 </body>
 </html>
