@@ -205,38 +205,42 @@ def read_cpu_model() -> str:
     return platform.processor() or "Unknown CPU"
 
 
-def read_nvidia_smi() -> dict | None:
-    """Return live GPU stats via nvidia-smi if available, else None."""
+def read_nvidia_smi() -> list[dict] | None:
+    """Return list of ALL NVIDIA GPUs via nvidia-smi. Handles multi-GPU."""
     if not shutil.which("nvidia-smi"):
         return None
     try:
         out = subprocess.check_output(
             [
                 "nvidia-smi",
-                "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
+                "--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
                 "--format=csv,noheader,nounits",
             ],
             timeout=2,
             text=True,
-        ).strip().splitlines()[0]
-        parts = [v.strip() for v in out.split(",")]
-        if len(parts) < 6:
-            return None
-        name, util, mem_used, mem_total, temp, power = parts
-        return {
-            "name": name,
-            "util": float(util) if util.replace(".", "").isdigit() else 0,
-            "mem_used_mib": float(mem_used) if mem_used.replace(".", "").isdigit() else 0,
-            "mem_total_mib": float(mem_total) if mem_total.replace(".", "").isdigit() else 0,
-            "temp_c": float(temp) if temp.replace(".", "").isdigit() else 0,
-            "power_w": float(power) if power.replace(".", "").isdigit() else 0,
-        }
+        ).strip().splitlines()
+        gpus = []
+        for line in out:
+            parts = [v.strip() for v in line.split(",")]
+            if len(parts) < 7:
+                continue
+            idx, name, util, mem_used, mem_total, temp, power = parts
+            gpus.append({
+                "index": int(idx) if idx.isdigit() else len(gpus),
+                "name": name,
+                "util": float(util) if util.replace(".", "").isdigit() else 0,
+                "mem_used_mib": float(mem_used) if mem_used.replace(".", "").isdigit() else 0,
+                "mem_total_mib": float(mem_total) if mem_total.replace(".", "").isdigit() else 0,
+                "temp_c": float(temp) if temp.replace(".", "").isdigit() else 0,
+                "power_w": float(power) if power.replace(".", "").isdigit() else 0,
+            })
+        return gpus if gpus else None
     except Exception:
         return None
 
 
-def read_amd_gpu() -> dict | None:
-    """Read AMD GPU stats via rocm-smi if available."""
+def read_amd_gpu() -> list[dict] | None:
+    """Read ALL AMD GPUs via rocm-smi if available."""
     if not shutil.which("rocm-smi"):
         return None
     try:
@@ -246,44 +250,139 @@ def read_amd_gpu() -> dict | None:
             timeout=2, text=True
         )
         data = json.loads(out)
-        # rocm-smi returns a dict keyed by card name
-        first = next(iter(data.values()))
-        return {
-            "name": first.get("Card series", "AMD GPU"),
-            "util": float(first.get("GPU use (%)", 0)),
-            "mem_used_mib": float(first.get("VRAM Total Used Memory (B)", 0)) / (1024 * 1024),
-            "mem_total_mib": float(first.get("VRAM Total Memory (B)", 0)) / (1024 * 1024),
-            "temp_c": float(first.get("Temperature (Sensor edge) (C)", 0)),
-            "power_w": float(first.get("Average Graphics Package Power (W)", 0)),
-        }
+        gpus = []
+        for card_name, info in data.items():
+            gpus.append({
+                "index": len(gpus),
+                "name": info.get("Card series", "AMD GPU"),
+                "util": float(info.get("GPU use (%)", 0)),
+                "mem_used_mib": float(info.get("VRAM Total Used Memory (B)", 0)) / (1024 * 1024),
+                "mem_total_mib": float(info.get("VRAM Total Memory (B)", 0)) / (1024 * 1024),
+                "temp_c": float(info.get("Temperature (Sensor edge) (C)", 0)),
+                "power_w": float(info.get("Average Graphics Package Power (W)", 0)),
+            })
+        return gpus if gpus else None
     except Exception:
         return None
 
 
-def read_gpu() -> dict:
-    """Try NVIDIA first, then AMD ROCm, else return None."""
-    smi = read_nvidia_smi()
-    if smi:
-        return {"available": True, "name": smi["name"], "vramTotalGb": round(smi["mem_total_mib"] / 1024, 2), "backend": "nvidia"}
+def read_integrated_gpu() -> dict | None:
+    """Detect integrated GPU (Intel/AMD iGPU) via OS commands."""
+    system = platform.system()
+    try:
+        if system == "Windows":
+            out = subprocess.check_output(
+                ["wmic", "path", "win32_VideoController", "get", "name,AdapterRAM", "/format:csv"],
+                text=True, timeout=2
+            ).strip()
+            for line in out.splitlines()[1:]:
+                if line.strip():
+                    parts = [p.strip() for p in line.split(",")]
+                    name = parts[-1] if parts else ""
+                    if name and "nvidia" not in name.lower() and "amd" not in name.lower():
+                        return {"name": name, "vram_mb": 0}
+        elif system == "Linux":
+            out = subprocess.check_output(["lspci"], text=True, timeout=2)
+            for line in out.splitlines():
+                if "VGA compatible controller" in line or "Display controller" in line:
+                    if "NVIDIA" not in line and "Advanced Micro Devices" not in line:
+                        name = line.split(":")[-1].strip()
+                        return {"name": name, "vram_mb": 0}
+    except Exception:
+        pass
+    return None
+
+
+def read_all_gpus() -> list[dict]:
+    """Detect ALL GPUs: NVIDIA dedicated, AMD dedicated, integrated iGPU."""
+    gpus = []
+    nvidia = read_nvidia_smi()
+    if nvidia:
+        for g in nvidia:
+            gpus.append({
+                "available": True, "name": g["name"],
+                "vramTotalGb": round(g["mem_total_mib"] / 1024, 2),
+                "backend": "nvidia", "type": "dedicated",
+                "index": g["index"],
+            })
     amd = read_amd_gpu()
     if amd:
-        return {"available": True, "name": amd["name"], "vramTotalGb": round(amd["mem_total_mib"] / 1024, 2), "backend": "amd"}
-    return {"available": False, "name": None, "vramTotalGb": 0, "backend": None}
+        for g in amd:
+            gpus.append({
+                "available": True, "name": g["name"],
+                "vramTotalGb": round(g["mem_total_mib"] / 1024, 2),
+                "backend": "amd", "type": "dedicated",
+                "index": g["index"],
+            })
+    # Try to detect integrated GPU (Intel iGPU, AMD APU iGPU)
+    igpu = read_integrated_gpu()
+    if igpu:
+        gpus.append({
+            "available": True, "name": igpu["name"],
+            "vramTotalGb": 0,
+            "backend": "integrated", "type": "integrated",
+            "index": len(gpus),
+        })
+    if not gpus:
+        gpus.append({"available": False, "name": None, "vramTotalGb": 0, "backend": None, "type": None, "index": 0})
+    return gpus
+
+
+def read_all_disks() -> list[dict]:
+    """Detect ALL storage partitions on the system."""
+    disks = []
+    try:
+        for part in psutil.disk_partitions(all=False):
+            try:
+                usage = psutil.disk_usage(part.mountpoint)
+                disks.append({
+                    "device": part.device,
+                    "mountpoint": part.mountpoint,
+                    "fstype": part.fstype,
+                    "totalGb": round(usage.total / (1024**3), 2),
+                    "usedGb": round(usage.used / (1024**3), 2),
+                    "freeGb": round(usage.free / (1024**3), 2),
+                    "percent": round(usage.percent, 1),
+                })
+            except (PermissionError, OSError):
+                continue
+    except Exception:
+        pass
+    # Fallback: at least show root
+    if not disks:
+        try:
+            du = psutil.disk_usage("/" if platform.system() != "Windows" else "C:\\")
+            disks.append({
+                "device": "root", "mountpoint": "/", "fstype": "unknown",
+                "totalGb": round(du.total / (1024**3), 2),
+                "usedGb": round(du.used / (1024**3), 2),
+                "freeGb": round(du.free / (1024**3), 2),
+                "percent": round(du.percent, 1),
+            })
+        except Exception:
+            disks.append({"device": "unknown", "mountpoint": "/", "fstype": "unknown",
+                         "totalGb": 0, "usedGb": 0, "freeGb": 0, "percent": 0})
+    return disks
 
 
 def get_device_info() -> dict:
-    """Detect real device specs once on startup. Full OS-level access."""
+    """Detect ALL real device specs. Multi-GPU, multi-disk, RAM details."""
     cpu_model = read_cpu_model()
     cpu_cores_logical = psutil.cpu_count(logical=True) or 0
     cpu_cores_physical = psutil.cpu_count(logical=False) or 0
 
     vm = psutil.virtual_memory()
     ram_total_gb = round(vm.total / (1024**3), 2)
+    ram_available_gb = round(vm.available / (1024**3), 2)
 
-    du = psutil.disk_usage("/")
-    disk_total_gb = round(du.total / (1024**3), 2)
+    gpus = read_all_gpus()
+    disks = read_all_disks()
 
-    gpu = read_gpu()
+    # Sum all disks for total storage
+    disk_total_gb = round(sum(d["totalGb"] for d in disks), 2)
+
+    # Primary GPU for backward compat
+    primary_gpu = gpus[0] if gpus else {"available": False, "name": None, "vramTotalGb": 0, "backend": None}
 
     return {
         "cpu": {
@@ -291,9 +390,18 @@ def get_device_info() -> dict:
             "coresPhysical": cpu_cores_physical,
             "coresLogical": cpu_cores_logical,
         },
-        "ram": {"totalGb": ram_total_gb},
-        "disk": {"totalGb": disk_total_gb},
-        "gpu": gpu,
+        "ram": {
+            "totalGb": ram_total_gb,
+            "availableGb": ram_available_gb,
+        },
+        "disk": {
+            "totalGb": disk_total_gb,
+            "partitions": disks,
+        },
+        "gpu": primary_gpu,
+        "gpus": gpus,
+        "diskCount": len(disks),
+        "gpuCount": len([g for g in gpus if g.get("available")]),
         "platform": platform.system(),
         "platform_release": platform.release(),
         "machine": platform.machine(),
@@ -317,17 +425,54 @@ def collect_metrics() -> dict:
     except Exception:
         cpu_util = 0.0
 
+    # Per-core CPU usage
+    try:
+        cpu_per_core = psutil.cpu_percent(interval=None, percpu=True)
+    except Exception:
+        cpu_per_core = []
+
     # RAM
     vm = psutil.virtual_memory()
     ram_total = vm.total / (1024**3)
     ram_used = vm.used / (1024**3)
+    ram_available = vm.available / (1024**3)
 
-    # SSD
-    du = psutil.disk_usage("/")
-    ssd_total = du.total / (1024**3)
-    ssd_used = du.used / (1024**3)
+    # ALL storage partitions — sum for total, list for per-disk details
+    all_disks = []
+    ssd_total = 0
+    ssd_used = 0
+    try:
+        for part in psutil.disk_partitions(all=False):
+            try:
+                usage = psutil.disk_usage(part.mountpoint)
+                disk_info = {
+                    "device": part.device,
+                    "mountpoint": part.mountpoint,
+                    "fstype": part.fstype,
+                    "totalGb": round(usage.total / (1024**3), 2),
+                    "usedGb": round(usage.used / (1024**3), 2),
+                    "freeGb": round(usage.free / (1024**3), 2),
+                    "percent": round(usage.percent, 1),
+                }
+                all_disks.append(disk_info)
+                ssd_total += usage.total / (1024**3)
+                ssd_used += usage.used / (1024**3)
+            except (PermissionError, OSError):
+                continue
+    except Exception:
+        pass
+    if not all_disks:
+        try:
+            du = psutil.disk_usage("/" if platform.system() != "Windows" else "C:\\")
+            ssd_total = du.total / (1024**3)
+            ssd_used = du.used / (1024**3)
+            all_disks.append({"device": "root", "mountpoint": "/", "fstype": "unknown",
+                             "totalGb": round(ssd_total, 2), "usedGb": round(ssd_used, 2),
+                             "freeGb": round(du.free / (1024**3), 2), "percent": round(du.percent, 1)})
+        except Exception:
+            ssd_total = ssd_used = 0
 
-    # Disk IO rate
+    # Disk IO rate (aggregated across all disks)
     disk_read_mbps = disk_write_mbps = 0.0
     cur_disk = psutil.disk_io_counters() if hasattr(psutil, "disk_io_counters") else None
     if _prev_disk_io and cur_disk:
@@ -349,46 +494,63 @@ def collect_metrics() -> dict:
 
     _prev_ts = now
 
-    # GPU — real via nvidia-smi if available
-    smi = read_nvidia_smi()
-    if smi:
-        gpu = {
-            "available": True,
-            "name": smi["name"],
-            "utilization": smi["util"],
-            "memoryUsedGb": round(smi["mem_used_mib"] / 1024, 2),
-            "memoryTotalGb": round(smi["mem_total_mib"] / 1024, 2),
-            "tempC": smi["temp_c"],
-            "powerW": smi["power_w"],
-        }
-    else:
-        amd = read_amd_gpu()
-        if amd:
-            gpu = {
+    # GPU — read ALL GPUs via nvidia-smi (multi-GPU support)
+    gpu = {"available": False}
+    all_gpus = []
+    nvidia_gpus = read_nvidia_smi()
+    if nvidia_gpus:
+        for g in nvidia_gpus:
+            gpu_data = {
                 "available": True,
-                "name": amd["name"],
-                "utilization": amd["util"],
-                "memoryUsedGb": round(amd["mem_used_mib"] / 1024, 2),
-                "memoryTotalGb": round(amd["mem_total_mib"] / 1024, 2),
-                "tempC": amd["temp_c"],
-                "powerW": amd["power_w"],
+                "name": g["name"],
+                "utilization": g["util"],
+                "memoryUsedGb": round(g["mem_used_mib"] / 1024, 2),
+                "memoryTotalGb": round(g["mem_total_mib"] / 1024, 2),
+                "tempC": g["temp_c"],
+                "powerW": g["power_w"],
+                "index": g["index"],
+                "backend": "nvidia",
+                "type": "dedicated",
             }
+            all_gpus.append(gpu_data)
+        # Primary GPU = first one (backward compat)
+        gpu = all_gpus[0]
+    else:
+        amd_gpus = read_amd_gpu()
+        if amd_gpus:
+            for g in amd_gpus:
+                gpu_data = {
+                    "available": True,
+                    "name": g["name"],
+                    "utilization": g["util"],
+                    "memoryUsedGb": round(g["mem_used_mib"] / 1024, 2),
+                    "memoryTotalGb": round(g["mem_total_mib"] / 1024, 2),
+                    "tempC": g["temp_c"],
+                    "powerW": g["power_w"],
+                    "index": g["index"],
+                    "backend": "amd",
+                    "type": "dedicated",
+                }
+                all_gpus.append(gpu_data)
+            gpu = all_gpus[0]
         else:
             gpu = {"available": False}
 
     return {
         "ts": int(now * 1000),
-        "cpu": {"utilization": round(cpu_util, 1)},
+        "cpu": {"utilization": round(cpu_util, 1), "perCore": [round(c, 1) for c in cpu_per_core] if cpu_per_core else []},
         "gpu": gpu,
-        "ram": {"usedGb": round(ram_used, 2), "totalGb": round(ram_total, 2)},
+        "gpus": all_gpus,
+        "ram": {"usedGb": round(ram_used, 2), "totalGb": round(ram_total, 2), "availableGb": round(ram_available, 2)},
         "ssd": {
             "usedGb": round(ssd_used, 2),
             "totalGb": round(ssd_total, 2),
             "readMbps": round(disk_read_mbps, 1),
             "writeMbps": round(disk_write_mbps, 1),
+            "partitions": all_disks,
         },
         "net": {"rxMbps": round(net_rx_mbps, 2), "txMbps": round(net_tx_mbps, 2)},
-        "gpu_available": bool(smi or amd if 'amd' in dir() else smi),
+        "gpu_available": len(all_gpus) > 0,
     }
 
 
