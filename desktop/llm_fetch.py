@@ -57,70 +57,65 @@ _live_source: str = "static fallback"
 
 
 def fetch_open_llm_leaderboard() -> dict[str, dict] | None:
-    """Try to fetch live data from HuggingFace Open LLM Leaderboard.
+    """Try to fetch live data from multiple sources.
 
-    The leaderboard is a Gradio app, so we use the Gradio client API
-    (POST to /api/predict with a known fn_index). Returns normalized
-    benchmark dict on success, None on failure.
+    Sources tried (in order):
+    1. HuggingFace API — get top models with download counts
+    2. Fallback to static data (updated mid-2024)
+
+    Note: Most benchmark leaderboard APIs (LMSYS, Artificial Analysis,
+    Open LLM Leaderboard) changed their endpoints or require auth.
+    We use HuggingFace's public model API as a proxy for "what models
+    are popular right now" and combine with our static benchmark scores.
     """
+    import httpx
+
+    # Source 1: HuggingFace public API — get trending models
     try:
-        # The Open LLM Leaderboard exposes a JSON API endpoint. Try the
-        # raw CSV export first — it's the most stable interface.
-        url = "https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard/raw/main/leaderboards/leaderboard.csv"
-        with httpx.Client(timeout=FETCH_TIMEOUT) as client:
-            r = client.get(url)
-            if r.status_code != 200:
-                log.info(f"open-llm-leaderboard CSV returned {r.status_code}")
-                return None
-            text = r.text
-        # Parse CSV — first line is header, then rows of model name + scores.
-        lines = text.strip().split("\n")
-        if len(lines) < 2:
-            return None
-        header = lines[0].split(",")
-        # Map column names we care about (case-insensitive)
-        col_idx = {}
-        for i, h in enumerate(header):
-            hl = h.strip().lower()
-            if "model" in hl and "model" not in col_idx:
-                col_idx["model"] = i
-            if "mmlu" in hl:
-                col_idx["mmlu"] = i
-            if "humaneval" in hl or "human_eval" in hl:
-                col_idx["humaneval"] = i
-            if "gsm8k" in hl:
-                col_idx["gsm8k"] = i
-            if "math" in hl and "math" not in col_idx:
-                col_idx["math"] = i
-        out: dict[str, dict] = {}
-        for line in lines[1:50]:  # top 50 models
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) <= max(col_idx.values(), default=0):
-                continue
-            name = parts[col_idx["model"]] if "model" in col_idx else parts[0]
-            # Skip rows that are clearly not real model entries
-            if "/" not in name and "-" not in name and len(name) < 3:
-                continue
-            entry = {
-                "name": name,
-                "color": "#6366f1",  # default to indigo for live-fetched
-                "mmlu": float(parts[col_idx["mmlu"]]) if "mmlu" in col_idx and _try_float(parts[col_idx["mmlu"]]) else 0,
-                "humaneval": float(parts[col_idx["humaneval"]]) if "humaneval" in col_idx and _try_float(parts[col_idx["humaneval"]]) else 0,
-                "gsm8k": float(parts[col_idx["gsm8k"]]) if "gsm8k" in col_idx and _try_float(parts[col_idx["gsm8k"]]) else 0,
-                "math": float(parts[col_idx["math"]]) if "math" in col_idx and _try_float(parts[col_idx["math"]]) else 0,
-                "reasoning": 70,  # not in OLL — use a flat estimate
-                "speed_tps": 50,  # not in OLL — use a flat estimate
-                "source": "open-llm-leaderboard (live)",
-            }
-            slug = name.lower().replace("/", "_").replace("-", "_").replace(" ", "_")[:30]
-            out[slug] = entry
-        if not out:
-            return None
-        log.info(f"open-llm-leaderboard: fetched {len(out)} models")
-        return out
+        url = "https://huggingface.co/api/models?sort=trending&direction=-1&limit=15&filter=text-generation,instruct"
+        with httpx.Client(timeout=FETCH_TIMEOUT, follow_redirects=True) as client:
+            r = client.get(url, headers={"Accept": "application/json"})
+            if r.status_code == 200:
+                data = r.json()
+                if isinstance(data, list) and len(data) > 0:
+                    # Merge trending models with our static benchmarks
+                    # If a trending model is in our static data, update its source
+                    # If not, add it with default scores
+                    out = {}
+                    # First, add all static benchmarks
+                    for k, v in STATIC_BENCHMARKS.items():
+                        out[k] = {**v, "source": "static (2024) + live trending"}
+
+                    # Then add trending models not in our static data
+                    for model in data[:15]:
+                        model_id = model.get("id", "")
+                        if not model_id or "/" not in model_id:
+                            continue
+                        # Check if already in our static data by fuzzy match
+                        slug = model_id.lower().replace("/", "_").replace("-", "_")[:30]
+                        already_exists = any(
+                            slug in k or model_id.split("/")[-1].lower() in v["name"].lower()
+                            for k, v in out.items()
+                        )
+                        if not already_exists:
+                            short_name = model_id.split("/")[-1]
+                            out[slug] = {
+                                "name": short_name,
+                                "color": "#6366f1",
+                                "mmlu": 0, "humaneval": 0, "gsm8k": 0, "math": 0,
+                                "reasoning": 0,
+                                "speed_tps": 0,
+                                "source": "HuggingFace trending (live)",
+                                "downloads": model.get("downloads", 0),
+                                "likes": model.get("likes", 0),
+                            }
+                    if out:
+                        log.info(f"HuggingFace API: fetched {len(data)} trending models, merged with {len(STATIC_BENCHMARKS)} static benchmarks")
+                        return out
     except Exception as e:
-        log.info(f"open-llm-leaderboard fetch failed: {e}")
-        return None
+        log.info(f"HuggingFace API fetch failed: {e}")
+
+    return None
 
 
 def _try_float(s: str) -> bool:
