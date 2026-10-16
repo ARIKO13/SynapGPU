@@ -107,19 +107,24 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             <span>Dashboard</span>
           </button>
-          <button class="tab" data-tab="console">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-            <span>Console</span>
+          <button class="tab" data-tab="train">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span>Train</span>
+            <span id="train-tab-pulse" class="tab-pulse hidden"></span>
           </button>
           <button class="tab" data-tab="chat">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span>Test LLM</span>
+            <span>Test</span>
             <span id="chat-tab-pulse" class="tab-pulse hidden"></span>
           </button>
           <button class="tab" data-tab="benchmark">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
             <span>Benchmark</span>
             <span id="benchmark-tab-pulse" class="tab-pulse hidden"></span>
+          </button>
+          <button class="tab" data-tab="console">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span>Console</span>
           </button>
         </div>
 
@@ -275,6 +280,103 @@
           </div>
         </section>
 
+        <!-- ============ Train Tab ============ -->
+        <section id="tab-train" class="tab-panel">
+          <div class="train-content">
+            <div class="train-card">
+              <div class="tc-header"><span>Training Pipeline</span></div>
+              <div class="train-step">
+                <div class="ts-num">1</div>
+                <div class="ts-body">
+                  <div class="ts-label">Base Model (.gguf)</div>
+                  <select id="train-model-select" class="train-select">
+                    <option value="">Select a .gguf model from your files…</option>
+                  </select>
+                  <p class="ts-hint">Upload a raw/pre-trained .gguf via sidebar. Any GGUF works — Llama, Mistral, Qwen, your custom model.</p>
+                </div>
+              </div>
+              <div class="train-step">
+                <div class="ts-num">2</div>
+                <div class="ts-body">
+                  <div class="ts-label">Dataset</div>
+                  <select id="train-dataset-select" class="train-select">
+                    <option value="">Select a dataset from your files…</option>
+                  </select>
+                  <p class="ts-hint">Upload .jsonl (instruction format), .csv, or .txt via sidebar. Each line = one training example.</p>
+                </div>
+              </div>
+              <div class="train-step">
+                <div class="ts-num">3</div>
+                <div class="ts-body">
+                  <div class="ts-label">Training Parameters</div>
+                  <div class="train-params">
+                    <div class="param-row">
+                      <span class="param-label">Epochs</span>
+                      <input type="number" id="train-epochs" value="3" min="1" max="100" class="param-input" />
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">Learning Rate</span>
+                      <input type="text" id="train-lr" value="1e-4" class="param-input" />
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">Batch Size</span>
+                      <input type="number" id="train-batch" value="4" min="1" max="128" class="param-input" />
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">Context Length</span>
+                      <input type="number" id="train-ctx" value="2048" min="512" max="8192" class="param-input" />
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">Method</span>
+                      <select id="train-method" class="param-input">
+                        <option value="lora">LoRA (fast, low VRAM)</option>
+                        <option value="full">Full Fine-tune (slow, high VRAM)</option>
+                      </select>
+                    </div>
+                    <div class="param-row">
+                      <span class="param-label">Output Name</span>
+                      <input type="text" id="train-output" value="trained-model" class="param-input" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="train-step">
+                <div class="ts-num">4</div>
+                <div class="ts-body">
+                  <button id="start-train-btn" class="btn btn-primary" disabled>
+                    <span>Start Training</span>
+                  </button>
+                  <button id="stop-train-btn" class="btn btn-danger hidden">
+                    <span>Stop Training</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="train-progress" class="train-progress hidden">
+              <div class="tp-header">
+                <span class="tp-title">Training Progress</span>
+                <span id="tp-status" class="tp-status">Idle</span>
+              </div>
+              <div class="tp-stats">
+                <div class="tp-stat"><span class="tps-label">Epoch</span><span id="tp-epoch" class="tps-value">0/0</span></div>
+                <div class="tp-stat"><span class="tps-label">Loss</span><span id="tp-loss" class="tps-value">—</span></div>
+                <div class="tp-stat"><span class="tps-label">LR</span><span id="tp-lr" class="tps-value">—</span></div>
+                <div class="tp-stat"><span class="tps-label">Iter</span><span id="tp-iter" class="tps-value">0</span></div>
+                <div class="tp-stat"><span class="tps-label">Speed</span><span id="tp-speed" class="tps-value">—</span></div>
+                <div class="tp-stat"><span class="tps-label">ETA</span><span id="tp-eta" class="tps-value">—</span></div>
+              </div>
+              <div class="tp-bar-bg"><div id="tp-bar" class="tp-bar"></div></div>
+              <div id="tp-log" class="tp-log"></div>
+            </div>
+
+            <div class="train-card">
+              <div class="tc-header"><span>Training Backend</span></div>
+              <div id="train-backend-status" class="train-backend-status">Checking available backends…</div>
+            </div>
+          </div>
+        </section>
+
         <section id="tab-console" class="tab-panel">
           <div class="console-header">
             <div class="ch-left">
@@ -292,66 +394,23 @@
         <section id="tab-chat" class="tab-panel">
           <div class="chat-header">
             <div class="ch-left">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              <span>LLM Test (WebGPU)</span>
+              <span>Test Model</span>
               <span id="chat-model-badge" class="chat-model-badge hidden">—</span>
             </div>
             <button id="clear-chat-btn" class="btn-ghost">Clear</button>
           </div>
 
-          <!-- LLM model loader -->
+          <!-- Model selector — from user's files only -->
           <div class="llm-loader">
-            <div class="llm-tabs">
-              <button class="llm-tab active" data-mode="preset">Preset Models</button>
-              <button class="llm-tab" data-mode="custom">Your Files</button>
+            <div class="llm-loader-row">
+              <span class="llm-label">Model</span>
+              <select id="test-model-select" class="llm-select">
+                <option value="">Select a trained model…</option>
+              </select>
+              <button id="load-model-btn" class="btn btn-primary">
+                <span>Load</span>
+              </button>
             </div>
-
-            <!-- Preset mode: pick from pre-built models -->
-            <div id="llm-preset" class="llm-mode">
-              <div class="llm-loader-row">
-                <label for="model-select" class="llm-label">Model</label>
-                <select id="model-select" class="llm-select">
-                  <option value="SmolLM2-360M-Instruct-q4f16_1-MLC">SmolLM2 360M (~250MB) — fast</option>
-                  <option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM2 1.7B (~1GB) — better</option>
-                  <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen2.5 0.5B (~400MB)</option>
-                  <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (~1GB)</option>
-                  <option value="Llama-3.2-1B-Instruct-q4f32_1-MLC">Llama 3.2 1B (~936MB)</option>
-                  <option value="Llama-3.2-3B-Instruct-q4f32_1-MLC">Llama 3.2 3B (~2.8GB)</option>
-                </select>
-                <button id="load-model-btn" class="btn btn-primary">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
-                  <span>Load via WebGPU</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Custom mode: use .gguf files from sidebar -->
-            <div id="llm-custom" class="llm-mode hidden">
-              <div id="custom-file-list" class="custom-file-list">
-                <!-- .gguf files from sidebar appear here -->
-              </div>
-              <div class="custom-spec-info">
-                <div class="csi-header">Browser LLM Limits</div>
-                <div class="csi-row">
-                  <span class="csi-label">Up to 500MB</span>
-                  <span class="csi-tag ok">Fast (WebGPU)</span>
-                </div>
-                <div class="csi-row">
-                  <span class="csi-label">500MB – 1GB</span>
-                  <span class="csi-tag warn">Slow</span>
-                </div>
-                <div class="csi-row">
-                  <span class="csi-label">1GB – 2GB</span>
-                  <span class="csi-tag warn">May crash</span>
-                </div>
-                <div class="csi-row">
-                  <span class="csi-label">Above 2GB</span>
-                  <span class="csi-tag bad">Use Desktop →</span>
-                </div>
-                <p class="csi-note">Browser limits WASM memory to ~2-4GB. For large models, download the Desktop app — it has full OS RAM access via nvidia-smi / Ollama.</p>
-              </div>
-            </div>
-
             <div id="load-progress" class="load-progress hidden">
               <div class="lp-header">
                 <span id="lp-text" class="lp-text">Loading…</span>
@@ -359,6 +418,7 @@
               </div>
               <div class="lp-bar-bg"><div id="lp-bar" class="lp-bar"></div></div>
             </div>
+          </div>
           </div>
 
           <div id="chat-messages" class="chat-messages">
@@ -451,6 +511,6 @@
   </div>
 
   <script src="/static/js/socket.io.min.js"></script>
-  <script src="/static/js/app.js?v=051"></script>
+  <script src="/static/js/app.js?v=060"></script>
 </body>
 </html>
