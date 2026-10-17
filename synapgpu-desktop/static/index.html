@@ -63,40 +63,35 @@
 
     <div class="body">
       <aside class="sidebar">
-        <div class="sidebar-header">
-          <div class="sidebar-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            <span>Files</span>
+        <!-- Models section -->
+        <div class="sidebar-section">
+          <div class="sidebar-header">
+            <span class="sidebar-title">Models</span>
+            <button id="clear-models-btn" class="btn-ghost hidden">Clear</button>
           </div>
-          <button id="clear-files-btn" class="btn-ghost hidden">Clear all</button>
-        </div>
-        <div id="files-summary" class="files-summary hidden"></div>
-        <div class="dropzone-wrap">
-          <div id="dropzone" class="dropzone" tabindex="0">
-            <input id="file-input" type="file" multiple hidden />
-            <div class="dropzone-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            </div>
-            <div class="dropzone-text">
-              <p class="dz-primary">Drop files here</p>
-              <p class="dz-secondary">or click to browse</p>
-            </div>
-            <div class="dz-categories">
-              <div class="dz-cat"><span class="cat-label">LLM Model</span><span class="cat-ext">.gguf .safetensors .onnx .modelfile</span></div>
-              <div class="dz-cat"><span class="cat-label">Notebook</span><span class="cat-ext">.ipynb</span></div>
-              <div class="dz-cat"><span class="cat-label">Dataset</span><span class="cat-ext">.csv .jsonl .parquet</span></div>
-            </div>
+          <div id="dropzone-model" class="dropzone" tabindex="0">
+            <input id="file-input-model" type="file" multiple accept=".gguf,.bin,.safetensors,.pt,.pth,.onnx,.ggmf,.ckpt,.h5,.pb,.tflite,.modelfile" hidden />
+            <p class="dz-primary">Drop .gguf models</p>
+            <p class="dz-secondary">or click to browse</p>
+          </div>
+          <div id="model-list" class="file-list">
+            <div class="empty-state"><p>No models yet</p></div>
           </div>
         </div>
-        <div id="file-list" class="file-list">
-          <div class="empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-            <p class="empty-title">No files yet</p>
-            <p class="empty-sub">Drag & drop to begin</p>
+
+        <!-- Datasets section -->
+        <div class="sidebar-section">
+          <div class="sidebar-header">
+            <span class="sidebar-title">Datasets</span>
+            <button id="clear-datasets-btn" class="btn-ghost hidden">Clear</button>
+          </div>
+          <div id="dropzone-dataset" class="dropzone" tabindex="0">
+            <input id="file-input-dataset" type="file" multiple accept=".json,.jsonl,.csv,.tsv,.parquet,.arrow,.feather,.txt,.zst,.zstd" hidden />
+            <p class="dz-primary">Drop datasets</p>
+            <p class="dz-secondary">.jsonl .csv .parquet .zst .arrow</p>
+          </div>
+          <div id="dataset-list" class="file-list">
+            <div class="empty-state"><p>No datasets yet</p></div>
           </div>
         </div>
       </aside>
@@ -280,7 +275,6 @@
           </div>
         </section>
 
-        <!-- ============ Train Tab ============ -->
         <section id="tab-train" class="tab-panel">
           <div class="train-content">
             <div class="train-card">
@@ -288,80 +282,44 @@
               <div class="train-step">
                 <div class="ts-num">1</div>
                 <div class="ts-body">
-                  <div class="ts-label">Base Model (.gguf)</div>
-                  <select id="train-model-select" class="train-select">
-                    <option value="">Select a .gguf model from your files…</option>
-                  </select>
-                  <p class="ts-hint">Upload a raw/pre-trained .gguf via sidebar. Any GGUF works — Llama, Mistral, Qwen, your custom model.</p>
+                  <div class="ts-label">Base Model</div>
+                  <select id="train-model-select" class="train-select"><option value="">Select from Models ↑</option></select>
+                  <p class="ts-hint">Upload .gguf to the Models section in sidebar. Any GGUF works.</p>
                 </div>
               </div>
               <div class="train-step">
                 <div class="ts-num">2</div>
                 <div class="ts-body">
                   <div class="ts-label">Dataset</div>
-                  <select id="train-dataset-select" class="train-select">
-                    <option value="">Select a dataset from your files…</option>
-                  </select>
-                  <p class="ts-hint">Upload .jsonl (instruction format), .csv, or .txt via sidebar. Each line = one training example.</p>
+                  <select id="train-dataset-select" class="train-select"><option value="">Select from Datasets ↑</option></select>
+                  <p class="ts-hint">Upload to Datasets section. Supports .jsonl .csv .parquet .zst .arrow .txt</p>
                 </div>
               </div>
               <div class="train-step">
                 <div class="ts-num">3</div>
                 <div class="ts-body">
-                  <div class="ts-label">Training Parameters</div>
+                  <div class="ts-label">Parameters</div>
                   <div class="train-params">
-                    <div class="param-row">
-                      <span class="param-label">Epochs</span>
-                      <input type="number" id="train-epochs" value="3" min="1" max="100" class="param-input" />
-                    </div>
-                    <div class="param-row">
-                      <span class="param-label">Learning Rate</span>
-                      <input type="text" id="train-lr" value="1e-4" class="param-input" />
-                    </div>
-                    <div class="param-row">
-                      <span class="param-label">Batch Size</span>
-                      <input type="number" id="train-batch" value="4" min="1" max="128" class="param-input" />
-                    </div>
-                    <div class="param-row">
-                      <span class="param-label">Context Length</span>
-                      <input type="number" id="train-ctx" value="2048" min="512" max="8192" class="param-input" />
-                    </div>
-                    <div class="param-row">
-                      <span class="param-label">Method</span>
-                      <select id="train-method" class="param-input">
-                        <option value="lora">LoRA (fast, low VRAM)</option>
-                        <option value="full">Full Fine-tune (slow, high VRAM)</option>
-                      </select>
-                    </div>
-                    <div class="param-row">
-                      <span class="param-label">Output Name</span>
-                      <input type="text" id="train-output" value="trained-model" class="param-input" />
-                    </div>
+                    <div class="param-row"><span class="param-label">Epochs</span><input type="number" id="train-epochs" value="3" min="1" max="100" class="param-input" /></div>
+                    <div class="param-row"><span class="param-label">Learning Rate</span><input type="text" id="train-lr" value="1e-4" class="param-input" /></div>
+                    <div class="param-row"><span class="param-label">Batch Size</span><input type="number" id="train-batch" value="4" min="1" max="128" class="param-input" /></div>
+                    <div class="param-row"><span class="param-label">Context</span><input type="number" id="train-ctx" value="2048" min="512" max="8192" class="param-input" /></div>
+                    <div class="param-row"><span class="param-label">Method</span><select id="train-method" class="param-input"><option value="lora">LoRA</option><option value="full">Full Fine-tune</option></select></div>
+                    <div class="param-row"><span class="param-label">Output</span><input type="text" id="train-output" value="trained-model" class="param-input" /></div>
                   </div>
                 </div>
               </div>
               <div class="train-step">
                 <div class="ts-num">4</div>
-                <div class="ts-body">
-                  <button id="start-train-btn" class="btn btn-primary" disabled>
-                    <span>Start Training</span>
-                  </button>
-                  <button id="stop-train-btn" class="btn btn-danger hidden">
-                    <span>Stop Training</span>
-                  </button>
-                </div>
+                <div class="ts-body"><button id="start-train-btn" class="btn btn-primary" disabled><span>Start Training</span></button></div>
               </div>
             </div>
-
             <div id="train-progress" class="train-progress hidden">
-              <div class="tp-header">
-                <span class="tp-title">Training Progress</span>
-                <span id="tp-status" class="tp-status">Idle</span>
-              </div>
+              <div class="tp-header"><span class="tp-title">Progress</span><span id="tp-status" class="tp-status">Idle</span></div>
               <div class="tp-stats">
                 <div class="tp-stat"><span class="tps-label">Epoch</span><span id="tp-epoch" class="tps-value">0/0</span></div>
                 <div class="tp-stat"><span class="tps-label">Loss</span><span id="tp-loss" class="tps-value">—</span></div>
-                <div class="tp-stat"><span class="tps-label">LR</span><span id="tp-lr" class="tps-value">—</span></div>
+                <div class="tp-stat"><span class="tps-label">Params</span><span id="tp-params" class="tps-value">—</span></div>
                 <div class="tp-stat"><span class="tps-label">Iter</span><span id="tp-iter" class="tps-value">0</span></div>
                 <div class="tp-stat"><span class="tps-label">Speed</span><span id="tp-speed" class="tps-value">—</span></div>
                 <div class="tp-stat"><span class="tps-label">ETA</span><span id="tp-eta" class="tps-value">—</span></div>
@@ -369,10 +327,9 @@
               <div class="tp-bar-bg"><div id="tp-bar" class="tp-bar"></div></div>
               <div id="tp-log" class="tp-log"></div>
             </div>
-
             <div class="train-card">
               <div class="tc-header"><span>Training Backend</span></div>
-              <div id="train-backend-status" class="train-backend-status">Checking available backends…</div>
+              <div id="train-backend-status" class="train-backend-status">Checking…</div>
             </div>
           </div>
         </section>
@@ -511,6 +468,6 @@
   </div>
 
   <script src="/static/js/socket.io.min.js"></script>
-  <script src="/static/js/app.js?v=060"></script>
+  <script src="/static/js/app.js?v=061"></script>
 </body>
 </html>
