@@ -63,6 +63,7 @@ interface PlatformState {
   metrics: Metrics | null
   metricsHistory: Metrics[]
   connected: boolean
+  connectionFailed: boolean
   // Console
   consoleLines: ConsoleLine[]
   // Chat
@@ -76,6 +77,7 @@ interface PlatformState {
   setRunState: (s: RunState, opts?: { model?: string | null }) => void
   setMetrics: (m: Metrics) => void
   setConnected: (v: boolean) => void
+  setConnectionFailed: (v: boolean) => void
   log: (text: string, level?: ConsoleLine['level']) => void
   clearConsole: () => void
   addChatMessage: (m: ChatMessage) => void
@@ -100,6 +102,7 @@ export const usePlatformStore = create<PlatformState>((set) => ({
   metrics: null,
   metricsHistory: [],
   connected: false,
+  connectionFailed: false,
   consoleLines: [],
   chatMessages: [],
   chatStreaming: false,
@@ -127,6 +130,7 @@ export const usePlatformStore = create<PlatformState>((set) => ({
       metricsHistory: [...s.metricsHistory, m].slice(-MAX_HISTORY),
     })),
   setConnected: (v) => set({ connected: v }),
+  setConnectionFailed: (v) => set({ connectionFailed: v }),
 
   log: (text, level = 'info') =>
     set((s) => ({

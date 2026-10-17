@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Cpu, MemoryStick, HardDrive, Thermometer, Zap, Activity, Network } from 'lucide-react'
+import { Cpu, MemoryStick, HardDrive, Thermometer, Zap, Activity, Network, WifiOff } from 'lucide-react'
 import { usePlatformStore, type Metrics } from '@/store/platform-store'
 import { MetricCard } from './metric-card'
 import { cn } from '@/lib/utils'
@@ -39,6 +39,7 @@ export function MonitoringDashboard() {
   const history = usePlatformStore((s) => s.metricsHistory)
   const runState = usePlatformStore((s) => s.runState)
   const connected = usePlatformStore((s) => s.connected)
+  const connectionFailed = usePlatformStore((s) => s.connectionFailed)
 
   const gpuHist = useMemo(() => history.map((m) => m.gpu.utilization), [history])
   const gpuMemHist = useMemo(
@@ -52,6 +53,29 @@ export function MonitoringDashboard() {
   const ssdReadHist = useMemo(() => history.map((m) => m.ssd.readMbps), [history])
 
   if (!metrics || !connected) {
+    // If we've explicitly failed to connect (or timed out after 8s), show
+    // a clear "Backend offline" panel so the user knows what's wrong and
+    // what to do about it. Otherwise show the "Connecting…" spinner — but
+    // only briefly, because useMetricsSocket will flip `connectionFailed`
+    // after 8s of no connection.
+    if (connectionFailed) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-rose-500/40 bg-rose-500/10">
+            <WifiOff className="h-6 w-6 text-rose-400" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-rose-300">Backend offline</p>
+            <p className="max-w-md text-xs text-zinc-500">
+              Mini-service WebSocket di port 3003 tidak terjangkau. Jalankan{' '}
+              <code className="font-mono text-emerald-400">bun run dev</code> di{' '}
+              <code className="font-mono text-emerald-400">mini-services/metrics-service</code>{' '}
+              untuk mengaktifkan telemetry real-time, lalu refresh halaman ini.
+            </p>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
         <div className="relative h-12 w-12">

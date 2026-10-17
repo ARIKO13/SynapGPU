@@ -12,6 +12,13 @@ import { usePlatformStore, type Metrics, type RunState } from '@/store/platform-
  * the local run-state changes — keeping the metrics service (a separate
  * process on port 3003) in sync with the UI as the single source of truth
  * for telemetry.
+ *
+ * Connection resilience:
+ * - On `connect_error` we mark the connection as failed so the dashboard can
+ *   show a clear "Backend offline" message instead of spinning forever.
+ * - An 8-second timeout drops the "Connecting…" panel to the offline state
+ *   if neither `connect` nor `metrics` has fired by then. Without this,
+ *   a missing mini-service would leave the dashboard stuck indefinitely.
  */
 export function useMetricsSocket() {
   useEffect(() => {
@@ -26,16 +33,32 @@ export function useMetricsSocket() {
 
     const setMetrics = usePlatformStore.getState().setMetrics
     const setConnected = usePlatformStore.getState().setConnected
+    const setConnectionFailed = usePlatformStore.getState().setConnectionFailed
     const setRunState = usePlatformStore.getState().setRunState
     const log = usePlatformStore.getState().log
 
+    let hasEverConnected = false
+
     socket.on('connect', () => {
+      hasEverConnected = true
       setConnected(true)
+      setConnectionFailed(false)
       log('Telemetry stream connected.', 'success')
     })
     socket.on('disconnect', () => {
       setConnected(false)
       log('Telemetry stream disconnected.', 'warn')
+    })
+    socket.on('connect_error', (err: Error) => {
+      // Only log the first failure — socket.io retries aggressively and we
+      // don't want to spam the console.
+      if (!usePlatformStore.getState().connectionFailed) {
+        setConnectionFailed(true)
+        log(
+          `Cannot reach metrics service on port 3003 — ${err.message}. Run \`bun run dev\` in mini-services/metrics-service.`,
+          'error',
+        )
+      }
     })
     socket.on('metrics', (m: Metrics) => usePlatformStore.getState().setMetrics(m))
     socket.on('session:state', (s: { runState: RunState; activeModel: string | null }) => {
@@ -45,6 +68,15 @@ export function useMetricsSocket() {
       else if (s.runState === 'stopped') log('Run stopped by user.', 'warn')
       else if (s.runState === 'idle') log('Session idle.', 'info')
     })
+
+    // Fallback: if still no connection after 8s, flip to offline state so
+    // the dashboard stops spinning. The socket will keep retrying in the
+    // background and will clear `connectionFailed` if/when it connects.
+    const fallbackTimer = setTimeout(() => {
+      if (!hasEverConnected && !usePlatformStore.getState().metrics) {
+        setConnectionFailed(true)
+      }
+    }, 8000)
 
     // Forward run-state transitions to the metrics service so it can update
     // its simulated telemetry. The local UI is the source of truth for the
@@ -61,6 +93,7 @@ export function useMetricsSocket() {
 
     return () => {
       unsub()
+      clearTimeout(fallbackTimer)
       socket.disconnect()
     }
   }, [])
