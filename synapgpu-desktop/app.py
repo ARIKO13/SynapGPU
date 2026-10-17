@@ -680,6 +680,98 @@ def delete_file():
     return jsonify({"error": "not found"}), 404
 
 
+# ----- File download ----------------------------------------------------
+@app.route("/api/files/<fid>/download")
+def download_file(fid):
+    with files_lock:
+        for f in files_registry:
+            if f.id == fid:
+                if f.saved_path and os.path.exists(f.saved_path):
+                    return send_from_directory(
+                        os.path.dirname(f.saved_path),
+                        os.path.basename(f.saved_path),
+                        as_attachment=True,
+                        download_name=f.name,
+                    )
+    return jsonify({"error": "not found"}), 404
+
+
+# ----- Training ---------------------------------------------------------
+@app.route("/api/train", methods=["POST"])
+def train_model():
+    import shutil as _shutil
+    body = request.get_json(silent=True) or {}
+    model_id = body.get("modelId")
+    dataset_id = body.get("datasetId")
+    output_name = body.get("output", "trained-model")
+    method = body.get("method", "lora")
+    epochs = body.get("epochs", 3)
+
+    if not model_id or not dataset_id:
+        return jsonify({"error": "modelId and datasetId required"}), 400
+
+    # Find model and dataset files
+    model_file = None
+    dataset_file = None
+    with files_lock:
+        for f in files_registry:
+            if f.id == model_id:
+                model_file = f
+            if f.id == dataset_id:
+                dataset_file = f
+
+    if not model_file:
+        return jsonify({"error": "model not found"}), 404
+    if not dataset_file:
+        return jsonify({"error": "dataset not found"}), 404
+
+    # For now: copy the model as "trained" (placeholder until real training backend)
+    # In production this would call llama.cpp finetune / unsloth / transformers
+    trained_id = str(uuid.uuid4())
+    trained_name = f"{output_name}.gguf"
+    trained_dest = UPLOAD_DIR / f"{trained_id}-{trained_name}"
+
+    try:
+        if model_file.saved_path and os.path.exists(model_file.saved_path):
+            _shutil.copy2(model_file.saved_path, trained_dest)
+        else:
+            return jsonify({"error": "model file not on disk"}), 500
+    except Exception as e:
+        return jsonify({"error": f"failed to create trained model: {e}"}), 500
+
+    trained_size = trained_dest.stat().st_size
+
+    # Estimate params from file size (rough: Q4_K_M ≈ 0.5 bytes per param)
+    # So size_bytes / 0.5 ≈ params, / 1e9 = params in billions
+    estimated_params_b = round(trained_size / (0.5 * 1e9), 2) if trained_size > 0 else 0
+
+    # Register trained model in file list
+    with files_lock:
+        rec = FileRecord(
+            id=trained_id,
+            name=trained_name,
+            size_bytes=trained_size,
+            category="llm",
+            uploaded_at=time.time(),
+            saved_path=str(trained_dest),
+        )
+        files_registry.append(rec)
+
+    print(f"[train] Training complete: {trained_name} ({trained_size} bytes, ~{estimated_params_b}B params)")
+
+    return jsonify({
+        "ok": True,
+        "name": trained_name,
+        "size": trained_size,
+        "params_b": estimated_params_b,
+        "fileId": trained_id,
+        "path": str(trained_dest),
+        "method": method,
+        "epochs": epochs,
+        "note": "Training is currently simulated (model copied). Real training backend (llama.cpp finetune / unsloth) will be added in next version.",
+    })
+
+
 # ----- Run control -------------------------------------------------------
 @app.route("/api/run", methods=["POST"])
 def run_control():
