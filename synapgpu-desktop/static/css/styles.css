@@ -209,6 +209,7 @@ html, body {
   border: 2px solid var(--bg-2); border-top-color: var(--accent);
   border-radius: 50%; animation: spin 0.7s linear infinite;
 }
+.spinner.stopped { animation: none; border-top-color: var(--bg-2); opacity: 0.4; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .dashboard-loading p { font-size: 11px; color: var(--text-3); }
 

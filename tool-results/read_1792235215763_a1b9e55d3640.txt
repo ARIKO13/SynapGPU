@@ -1,0 +1,256 @@
+     1→  }catch(e){log('Load failed: '+e.message,'error');state.runState='error';renderRunState();}
+     2→}
+     3→
+     4→// --- Start training ---
+     5→async function handleStartTrain(){
+     6→  const ms=$('#train-model-select'),ds=$('#train-dataset-select');if(!ms||!ms.value||!ds||!ds.value)return;
+     7→  const params={
+     8→    modelId:ms.value,
+     9→    datasetId:ds.value,
+    10→    epochs:parseInt($('#train-epochs')?.value||'3'),
+    11→    lr:$('#train-lr')?.value||'1e-4',
+    12→    batch:parseInt($('#train-batch')?.value||'4'),
+    13→    ctx:parseInt($('#train-ctx')?.value||'2048'),
+    14→    method:$('#train-method')?.value||'lora',
+    15→    output:$('#train-output')?.value||'trained-model',
+    16→  };
+    17→  log('Starting training: '+params.method+' on '+params.modelId+' with '+params.datasetId,'info');
+    18→  $('#start-train-btn')?.classList.add('hidden');
+    19→  $('#stop-train-btn')?.classList.remove('hidden');
+    20→  const tp=$('#train-progress');if(tp)tp.classList.remove('hidden');
+    21→  $('#tp-status').textContent='Running';
+    22→  $('#tp-epoch').textContent='0/'+params.epochs;
+    23→  $('#tp-loss').textContent='—';
+    24→  $('#tp-params').textContent='—';
+    25→  $('#tp-iter').textContent='0';
+    26→  $('#tp-speed').textContent='—';
+    27→  $('#tp-eta').textContent='—';
+    28→  $('#tp-bar').style.width='0%';
+    29→  $('#tp-log').innerHTML='';
+    30→
+    31→  try{
+    32→    const r=await fetch('/api/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)});
+    33→    const data=await r.json();
+    34→    if(!r.ok)throw new Error(data.error||'Training failed');
+    35→    // Training completed (backend does it synchronously for now)
+    36→    trainedModel={
+    37→      name:data.name||params.output+'.gguf',
+    38→      size:data.size||0,
+    39→      params:data.params_b||0,
+    40→      base:state.files.find(f=>f.id===params.modelId)?.name||'?',
+    41→      dataset:state.files.find(f=>f.id===params.datasetId)?.name||'?',
+    42→      epochs:params.epochs,
+    43→      fileId:data.fileId||'',
+    44→      path:data.path||'',
+    45→    };
+    46→    $('#tp-status').textContent='Done';
+    47→    $('#tp-bar').style.width='100%';
+    48→    $('#tp-epoch').textContent=params.epochs+'/'+params.epochs;
+    49→    $('#tp-params').textContent=trainedModel.params+'B';
+    50→    $('#tp-log').innerHTML+='<br>Training complete. Model: '+trainedModel.name+' ('+trainedModel.params+'B params)';
+    51→    log('Training complete: '+trainedModel.name+' ('+trainedModel.params+'B params)','success');
+    52→    // Show trained model in Test tab
+    53→    showTrainedModel();
+    54→    // Add to file list
+    55→    if(data.fileId){await refreshFiles();populateModelSelects();}
+    56→  }catch(e){
+    57→    $('#tp-status').textContent='Error';
+    58→    $('#tp-log').innerHTML+='<br>Error: '+e.message;
+    59→    log('Training error: '+e.message,'error');
+    60→  }finally{
+    61→    $('#start-train-btn')?.classList.remove('hidden');
+    62→    $('#stop-train-btn')?.classList.add('hidden');
+    63→  }
+    64→}
+    65→
+    66→function showTrainedModel(){
+    67→  if(!trainedModel)return;
+    68→  $('#trained-model-area')?.classList.add('hidden');
+    69→  const ti=$('#trained-model-info');if(!ti)return;
+    70→  ti.classList.remove('hidden');
+    71→  $('#ti-name').textContent=trainedModel.name;
+    72→  $('#ti-size').textContent=trainedModel.size>0?humanSize(trainedModel.size):'—';
+    73→  $('#ti-params').textContent=trainedModel.params>0?trainedModel.params+'B':'—';
+    74→  $('#ti-base').textContent=trainedModel.base;
+    75→  $('#ti-dataset').textContent=trainedModel.dataset;
+    76→  $('#ti-epochs').textContent=trainedModel.epochs;
+    77→  if(trainedModel.fileId){
+    78→    const dl=$('#download-trained-btn');if(dl)dl.href='/api/files/'+trainedModel.fileId+'/download';
+    79→  }
+    80→}
+    81→
+    82→// --- Tab switching for Test (pretrained vs trained) ---
+    83→function setLlmMode(mode){llmMode=mode;$$('.llm-tab').forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));$('#llm-pretrained')?.classList.toggle('hidden',mode!=='pretrained');$('#llm-trained')?.classList.toggle('hidden',mode!=='trained');}
+    84→
+    85→function onModelReady(mid){
+    86→  const pe=$('#load-progress');if(pe){$('#lp-text').textContent='Ready';$('#lp-percent').textContent='100%';$('#lp-bar').style.width='100%';setTimeout(()=>{pe.classList.add('hidden');},1500);}
+    87→  const inp=$('#chat-input');if(inp){inp.disabled=false;inp.placeholder='Type a message… (Cmd/Ctrl+Enter)';inp.focus();}
+    88→  const b=$('#chat-model-badge');if(b){b.textContent=mid;b.classList.remove('hidden');}
+    89→  state.runState='running';state.activeModel=mid;renderRunState();
+    90→}
+    91→
+    92→// Benchmark analyzer
+    93→const BENCHMARKS_FALLBACK={
+    94→  gpt4o:{name:"GPT-4o",color:"#10a37f",mmlu:88.7,humaneval:90.2,gsm8k:95.8,math:76.6,reasoning:93,speed_tps:80,params_b:200},
+    95→  claude35:{name:"Claude 3.5 Sonnet",color:"#d97706",mmlu:88.7,humaneval:92.0,gsm8k:96.4,math:71.1,reasoning:95,speed_tps:80,params_b:175},
+    96→  llama3_405b:{name:"Llama 3.1 405B",color:"#0866ff",mmlu:87.3,humaneval:89.0,gsm8k:96.8,math:73.8,reasoning:91,speed_tps:20,params_b:405},
+    97→  llama3_70b:{name:"Llama 3.1 70B",color:"#0866ff",mmlu:82.0,humaneval:80.0,gsm8k:84.5,math:50.0,reasoning:85,speed_tps:100,params_b:70},
+    98→  llama3_8b:{name:"Llama 3.1 8B",color:"#7c3aed",mmlu:66.0,humaneval:72.0,gsm8k:84.0,math:30.0,reasoning:65,speed_tps:150,params_b:8},
+    99→  mistral_large:{name:"Mistral Large 2",color:"#ff6b35",mmlu:84.0,humaneval:81.0,gsm8k:81.0,math:45.0,reasoning:82,speed_tps:60,params_b:123},
+   100→  gemini15_pro:{name:"Gemini 1.5 Pro",color:"#4285f4",mmlu:85.9,humaneval:84.1,gsm8k:91.7,math:67.7,reasoning:91,speed_tps:50,params_b:175},
+   101→  gemini_flash:{name:"Gemini 1.5 Flash",color:"#4285f4",mmlu:78.9,humaneval:71.5,gsm8k:80.5,math:53.0,reasoning:84,speed_tps:200,params_b:8},
+   102→  qwen2_72b:{name:"Qwen2.5 72B",color:"#06b6d4",mmlu:84.0,humaneval:86.0,gsm8k:89.0,math:50.0,reasoning:84,speed_tps:90,params_b:72},
+   103→  qwen2_7b:{name:"Qwen2.5 7B",color:"#06b6d4",mmlu:72.0,humaneval:75.0,gsm8k:85.0,math:35.0,reasoning:70,speed_tps:130,params_b:7},
+   104→  phi3_medium:{name:"Phi-3 Medium",color:"#ec4899",mmlu:78.0,humaneval:62.0,gsm8k:91.0,math:45.0,reasoning:75,speed_tps:120,params_b:14},
+   105→  deepseek_v2:{name:"DeepSeek-V2",color:"#4f46e5",mmlu:78.5,humaneval:81.1,gsm8k:92.2,math:53.7,reasoning:80,speed_tps:60,params_b:236},
+   106→  smollm2_360m:{name:"SmolLM2 360M",color:"#84cc16",mmlu:25.0,humaneval:15.0,gsm8k:10.0,math:5.0,reasoning:20,speed_tps:300,params_b:0.36},
+   107→  smollm2_1b:{name:"SmolLM2 1.7B",color:"#84cc16",mmlu:35.0,humaneval:25.0,gsm8k:20.0,math:10.0,reasoning:30,speed_tps:250,params_b:1.7},
+   108→};
+   109→const DIMENSIONS=[
+   110→  {key:'reasoning',label:'Reasoning',hint:'Logical & multi-step thinking'},
+   111→  {key:'code',label:'Code',hint:'Code blocks & function defs'},
+   112→  {key:'math',label:'Math',hint:'Numbers, formulas, equations'},
+   113→  {key:'knowledge',label:'Knowledge',hint:'Depth & richness of content'},
+   114→  {key:'speed',label:'Speed',hint:'Throughput (tokens/sec)'},
+   115→  {key:'coherence',label:'Coherence',hint:'Sentence structure sanity'},
+   116→];
+   117→function analyzeResponse(u,a,lat){const rl=a.length,pw=Math.max(1,u.trim().split(/\s+/).length),rw=Math.max(1,a.trim().split(/\s+/).length),rt=Math.max(1,Math.round(rl/4)),tps=lat>0?(rt/lat)*1000:0;const cb=(a.match(/```[\s\S]*?```/g)||[]).length,ic=(a.match(/`[^`\n]+`/g)||[]).length,hf=/\b(def |function |class |return |import )/.test(a),cl=(a.match(/^\s*(if |for |while |return |def |class |import |const )/gm)||[]).length,hm=/[∑∫π√≠≤≥±×÷∞²]/.test(a),hn=/\d/.test(a),he=/[^=!<>]=[^\s=]/.test(a),rw2=(a.toLowerCase().match(/\b(therefore|because|thus|hence|first|second|however|moreover|step|reason)\b/g)||[]).length,sc=(a.match(/[.!?\n]+/g)||[]).length,as=sc>0?rw/sc:rw,rd=rw/pw,rd2=rw2/Math.max(1,rw);const rs=Math.min(100,Math.round(rd2*250+(sc>3?25:sc*8)+(rw>50?15:0)+(rw>150?10:0)));const cs=Math.min(100,Math.round(cb*30+Math.min(20,cl*4)+(hf?20:0)+Math.min(10,ic*2)));const ms=Math.min(100,Math.round((hm?35:0)+(hn?25:0)+(he?20:0)+20));const ks=Math.min(100,Math.round(Math.min(35,rw/4)+Math.min(25,rl/60)+Math.min(20,as)+Math.min(20,rd*5)));const ss=Math.min(100,Math.round(tps));const co=a.length>50&&sc>=1&&as<30;const cos=Math.min(100,Math.round((co?35:0)+(rw>30?20:0)+(sc>2?20:sc*7)+(as>5&&as<25?25:10)));const scores={reasoning:rs,code:cs,math:ms,knowledge:ks,speed:ss,coherence:cos};const overall=Math.round((rs+cs+ms+ks+ss+cos)/6);return{responseLen:rl,responseWords:rw,latencyMs:lat,tps:Math.round(tps*10)/10,scores,overall,timestamp:Date.now()};}
+   118→function llmB2D(b){if(!b)return null;return{reasoning:b.reasoning||70,code:b.humaneval||0,math:Math.round(((b.gsm8k||0)+(b.math||0))/2),knowledge:b.mmlu||0,speed:Math.min(100,b.speed_tps||0),coherence:Math.round(((b.mmlu||0)+(b.reasoning||70))/2)};}
+   119→function llmOS(b){if(!b)return 0;const d=llmB2D(b);return Math.round((d.reasoning+d.code+d.math+d.knowledge+d.speed+d.coherence)/6);}
+   120→function aggScores(){if(!state.benchmarkResults.length)return null;const s={reasoning:0,code:0,math:0,knowledge:0,speed:0,coherence:0};state.benchmarkResults.forEach(r=>Object.keys(s).forEach(k=>s[k]+=r.analysis.scores[k]));const n=state.benchmarkResults.length;Object.keys(s).forEach(k=>s[k]=Math.round(s[k]/n));return s;}
+   121→function aggOverall(){if(!state.benchmarkResults.length)return 0;const s=aggScores();return Math.round((s.reasoning+s.code+s.math+s.knowledge+s.speed+s.coherence)/6);}
+   122→function computeVerdict(){const u=aggOverall();if(!u)return null;const b=Object.keys(state.benchmarks).length?state.benchmarks:BENCHMARKS_FALLBACK;
+   123→// Filter LLMs by parameter count if user model params known
+   124→const userParams=state.userModelParamsB||0;
+   125→let filtered=b;
+   126→if(userParams>0){
+   127→const range=userParams*3; // within 3x of user's params
+   128→filtered=Object.fromEntries(Object.entries(b).filter(([k,v])=>{
+   129→const p=v.params_b||0;return p>0&&p<=range&&p>=userParams/3;}));
+   130→// If too few in range, expand to 10x
+   131→if(Object.keys(filtered).length<3){filtered=Object.fromEntries(Object.entries(b).filter(([k,v])=>{const p=v.params_b||0;return p>0&&p<=userParams*10;}));}
+   132→log('Benchmark filter: user model '+userParams+'B params → comparing with '+Object.keys(filtered).length+' LLMs in similar range','info');
+   133→}
+   134→const comps=Object.entries(filtered).map(([k,v])=>{const o=llmOS(v);return{key:k,name:v.name+(v.params_b?' ('+v.params_b+'B)':''),color:v.color,overall:o,diff:u-o,source:v.source||'',params:v.params_b||0};});comps.sort((a,b)=>b.overall-a.overall);const closest=comps.reduce((b,c)=>!b||Math.abs(c.diff)<Math.abs(b.diff)?c:b,null);return{userOverall:u,comparisons:comps,closest,beats:comps.filter(c=>c.diff>0).sort((a,b)=>a.diff-b.diff),losesTo:comps.filter(c=>c.diff<0).sort((a,b)=>b.diff-a.diff)};}
+   135→
+   136→// Rendering — same as web version
+   137→function statusAccent(p){return p>=90?'rose':p>=70?'amber':'emerald';}
+   138→function applyAccentClass(c,p){c.setAttribute('data-accent',statusAccent(p));}
+   139→function renderConnection(){const cs=$('#conn-status'),ft=$('#footer-conn');if(state.connected){cs.classList.add('online');$('#conn-text').textContent='live';ft.classList.add('online');ft.innerHTML='<span class="indicator-dot"></span> live';}else{cs.classList.remove('online');$('#conn-text').textContent='offline';ft.classList.remove('online');ft.innerHTML='<span class="indicator-dot"></span> offline';}if(state.connected||state.metrics){$('#dashboard-loading').classList.add('hidden');$('#dashboard-content').classList.remove('hidden');}else{$('#dashboard-loading').classList.remove('hidden');$('#dashboard-content').classList.add('hidden');}}
+   140→function renderDeviceInfo(){const i=state.deviceInfo;if(!i)return;$('#di-hostname').textContent=`${i.platform||''} ${i.machine||''}`.trim()||i.cpu.model;$('#di-cpu').textContent=i.cpu.model;$('#di-cpu').title=i.cpu.model;$('#di-cores').textContent=`${i.cpu.coresPhysical}P / ${i.cpu.coresLogical}L`;$('#cpu-cores-footer').textContent=`${i.cpu.coresLogical} logical cores`;$('#di-ram').textContent=`${i.ram.totalGb} GB`;$('#ram-total').textContent=i.ram.totalGb;$('#di-disk').textContent=`${i.disk.totalGb} GB`;$('#ssd-total').textContent=i.disk.totalGb;const ga=$('#gpu-unavailable'),gm=$('#gpu-metrics-grid'),gc=$('#gpu-chart-card');if(i.gpu.available){$('#di-gpu').textContent=i.gpu.name;$('#di-gpu').classList.add('accent');$('#di-vram').textContent=`${i.gpu.vramTotalGb} GB`;$('#di-vram').classList.add('accent');$('#gpu-vram-total').textContent=i.gpu.vramTotalGb.toFixed(0);ga?.classList.add('hidden');gm?.classList.remove('hidden');gc?.classList.remove('hidden');}else{$('#di-gpu').textContent='Not detected';$('#di-gpu').classList.add('muted');$('#di-vram').textContent='—';$('#di-vram').classList.add('muted');ga?.classList.remove('hidden');gm?.classList.add('hidden');gc?.classList.add('hidden');}renderMultiGPU();renderMultiDisk();}
+   141→
+   142→function renderMultiGPU(){const i=state.deviceInfo;if(!i||!i.gpus)return;const section=$('#multi-gpu-section');if(!section)return;const gpus=i.gpus.filter(g=>g.available);if(gpus.length<=1){section.classList.add('hidden');return;}section.classList.remove('hidden');$('#gpu-count-badge').textContent=gpus.length;const list=$('#multi-gpu-list');let h='';gpus.forEach(g=>{const tag=g.type==='integrated'?'integrated':'dedicated';h+=`<div class="mds-row"><span class="mds-row-label">${escapeHtml(g.name)}</span><span class="mds-row-tag ${tag}">${g.type||'dedicated'}</span><span class="mds-row-value">${g.vramTotalGb} GB VRAM</span><span class="mds-row-value">${g.backend||'?'}</span></div>`;});list.innerHTML=h;}
+   143→
+   144→function renderMultiDisk(){const i=state.deviceInfo;if(!i||!i.disk||!i.disk.partitions)return;const section=$('#multi-disk-section');if(!section)return;const parts=i.disk.partitions;if(parts.length<=1){section.classList.add('hidden');return;}section.classList.remove('hidden');$('#disk-count-badge').textContent=parts.length;const list=$('#multi-disk-list');let h='';parts.forEach(p=>{const pct=p.percent||0;const barCls=pct>=90?'bad':pct>=70?'warn':'';h+=`<div class="mds-row"><span class="mds-row-label">${escapeHtml(p.device||p.mountpoint||'disk')}</span><span class="mds-row-value">${p.usedGb}/${p.totalGb} GB</span><span class="mds-row-value">${pct.toFixed(0)}%</span><span class="mds-row-bar"><span class="mds-row-bar-fill ${barCls}" style="width:${pct}%"></span></span></div>`;});list.innerHTML=h;}
+   145→
+   146→function renderMetricsLiveMultiGPU(){const m=state.metrics;if(!m||!m.gpus)return;const list=$('#multi-gpu-list');if(!list)return;const gpus=m.gpus.filter(g=>g.available);if(gpus.length<=1)return;let h='';gpus.forEach(g=>{const tag=g.type==='integrated'?'integrated':'dedicated';const util=g.utilization||0;const memPct=g.memoryTotalGb>0?(g.memoryUsedGb/g.memoryTotalGb*100):0;const barCls=util>=90?'bad':util>=70?'warn':'';h+=`<div class="mds-row"><span class="mds-row-label">${escapeHtml(g.name)}</span><span class="mds-row-tag ${tag}">${g.type||'dedicated'}</span><span class="mds-row-value">${util.toFixed(0)}% · ${g.memoryUsedGb.toFixed(1)}/${g.memoryTotalGb.toFixed(0)}GB</span><span class="mds-row-value">${g.tempC?.toFixed(0)||'?'}°C · ${g.powerW?.toFixed(0)||'?'}W</span><span class="mds-row-bar"><span class="mds-row-bar-fill ${barCls}" style="width:${util}%"></span></span></div>`;});list.innerHTML=h;}
+   147→
+   148→function renderMetricsLiveMultiDisk(){const m=state.metrics;if(!m||!m.ssd||!m.ssd.partitions)return;const list=$('#multi-disk-list');if(!list)return;const parts=m.ssd.partitions;if(parts.length<=1)return;let h='';parts.forEach(p=>{const pct=p.percent||0;const barCls=pct>=90?'bad':pct>=70?'warn':'';h+=`<div class="mds-row"><span class="mds-row-label">${escapeHtml(p.device||p.mountpoint||'disk')}</span><span class="mds-row-value">${p.usedGb}/${p.totalGb} GB</span><span class="mds-row-value">${pct.toFixed(0)}%</span><span class="mds-row-bar"><span class="mds-row-bar-fill ${barCls}" style="width:${pct}%"></span></span></div>`;});list.innerHTML=h;}
+   149→function renderMetrics(){if(!state.metrics)return;const m=state.metrics;$('#status-time').textContent=new Date(m.ts).toLocaleTimeString('en-US',{hour12:false});const cu=m.cpu?.utilization??0;state.cpuUtilHistory.push(cu);if(state.cpuUtilHistory.length>MAX_HISTORY)state.cpuUtilHistory.shift();$('#cpu-util').textContent=cu.toFixed(1);$('#cpu-util-bar').style.width=`${cu}%`;const cc=$('#cpu-metrics-grid .metric-card');if(cc)applyAccentClass(cc,cu);
+   150→if(m.gpu.available&&m.gpu.utilization!==undefined){const gu=m.gpu.utilization;$('#gpu-util').textContent=gu.toFixed(1);$('#gpu-util-bar').style.width=`${gu}%`;$('#gpu-vram').textContent=m.gpu.memoryUsedGb.toFixed(1);$('#gpu-vram-total').textContent=m.gpu.memoryTotalGb.toFixed(0);const gmp=(m.gpu.memoryUsedGb/m.gpu.memoryTotalGb)*100;$('#gpu-mem').textContent=gmp.toFixed(1);$('#gpu-mem-bar').style.width=`${gmp}%`;$('#gpu-temp-wrap').textContent=`${m.gpu.tempC.toFixed(0)}°C`;$('#gpu-power-wrap').textContent=`${m.gpu.powerW.toFixed(0)} W`;const gcs=$$('#gpu-metrics-grid .metric-card');if(gcs[0])applyAccentClass(gcs[0],gu);if(gcs[1])applyAccentClass(gcs[1],gmp);state.gpuUtilHistory.push(gu);if(state.gpuUtilHistory.length>MAX_HISTORY)state.gpuUtilHistory.shift();const avg=state.gpuUtilHistory.length?state.gpuUtilHistory.reduce((a,b)=>a+b,0)/state.gpuUtilHistory.length:0;$('#gpu-avg').textContent=avg.toFixed(1);drawLineChart('#gpu-chart',state.gpuUtilHistory,'#10b981',100);}
+   151→const rp=(m.ram.usedGb/m.ram.totalGb)*100;$('#ram-pct').textContent=rp.toFixed(0);$('#ram-used').textContent=m.ram.usedGb.toFixed(2);$('#ram-total').textContent=m.ram.totalGb;$('#ram-bar').style.width=`${rp}%`;
+   152→const sp=(m.ssd.usedGb/m.ssd.totalGb)*100;$('#ssd-pct').textContent=sp.toFixed(1);$('#ssd-used').textContent=m.ssd.usedGb.toFixed(0);$('#ssd-total').textContent=m.ssd.totalGb;$('#ssd-bar').style.width=`${sp}%`;$('#ssd-read').textContent=m.ssd.readMbps.toFixed(0);$('#ssd-write').textContent=m.ssd.writeMbps.toFixed(0);$('#ssd-read-2').textContent=m.ssd.readMbps.toFixed(0);$('#ssd-write-2').textContent=m.ssd.writeMbps.toFixed(0);
+   153→$('#net-rx').textContent=m.net.rxMbps.toFixed(1);$('#net-tx').textContent=m.net.txMbps.toFixed(1);
+   154→$('#footer-gpu').textContent=m.gpu.available?(m.gpu.utilization??0).toFixed(0):'—';$('#footer-ram').textContent=rp.toFixed(0);$('#footer-ssd').textContent=sp.toFixed(0);$('#footer-files').textContent=state.files.length;
+   155→renderMetricsLiveMultiGPU();renderMetricsLiveMultiDisk();
+   156→drawSparkline('#ram-spark',state.metricsHistory.map(x=>(x.ram.usedGb/x.ram.totalGb)*100),'#06b6d4');drawLineChart('#ssd-chart',state.ssdReadHistory,'#f59e0b',1000);}
+   157→function drawSparkline(s,d,c){const v=$(s);if(!v)return;v.innerHTML='';if(d.length<2)return;const W=200,H=40,mx=Math.max(...d,1),mn=Math.min(...d,0),r=mx-mn||1;const p=d.map((v,i)=>`${((i/(d.length-1))*W).toFixed(1)},${(H-((v-mn)/r)*H).toFixed(1)}`).join(' ');const el=document.createElementNS('http://www.w3.org/2000/svg','polyline');el.setAttribute('points',p);el.setAttribute('fill','none');el.setAttribute('stroke',c);el.setAttribute('stroke-width','1.5');el.setAttribute('vector-effect','non-scaling-stroke');v.appendChild(el);}
+   158→function drawLineChart(s,d,c,mY){const v=$(s);if(!v)return;v.innerHTML='';if(d.length<2)return;const vb=v.getAttribute('viewBox').split(' ').map(Number),W=vb[2],H=vb[3],mx=Math.max(...d,1,mY?mY*0.1:0),r=mx||1;const p=d.map((v,i)=>`${((i/(d.length-1))*W).toFixed(1)},${(H-(v/r)*H).toFixed(1)}`).join(' ');const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');poly.setAttribute('points',`0,${H} ${p} ${W},${H}`);poly.setAttribute('fill',c);poly.setAttribute('fill-opacity','0.15');v.appendChild(poly);const ln=document.createElementNS('http://www.w3.org/2000/svg','polyline');ln.setAttribute('points',p);ln.setAttribute('fill','none');ln.setAttribute('stroke',c);ln.setAttribute('stroke-width','1.5');ln.setAttribute('vector-effect','non-scaling-stroke');v.appendChild(ln);}
+   159→function renderRunState(){const rb=$('#run-btn'),sb=$('#stop-btn');const lf=state.files.find(f=>f.category==='llm');const canRun=!!lf&&['idle','stopped','error'].includes(state.runState);if(['running','loading'].includes(state.runState)){rb.classList.add('hidden');sb.classList.remove('hidden');sb.querySelector('span').textContent=state.runState==='loading'?'Loading…':'Stop';}else{rb.classList.remove('hidden');sb.classList.add('hidden');rb.disabled=!canRun;}const d=$('#status-dot'),t=$('#status-text');d.className='status-dot';if(state.runState==='running'){d.classList.add('running');t.textContent='Model active';}else if(state.runState==='loading'){d.classList.add('loading');t.textContent='Loading model…';}else if(state.runState==='error'){d.classList.add('error');t.textContent='Error';}else if(state.runState==='stopped'){t.textContent='Stopped';}else{t.textContent='System idle';}const b=$('#model-badge');if(state.activeModel&&['running','loading'].includes(state.runState)){b.classList.remove('hidden');$('#active-model').textContent=state.activeModel;startUptime();}else{b.classList.add('hidden');stopUptime();}$('#footer-run').textContent=state.runState;const p=$('#chat-tab-pulse');if(state.runState==='running')p?.classList.remove('hidden');else p?.classList.add('hidden');const cb=$('#chat-model-badge');if(state.activeModel&&state.runState==='running'){cb.textContent=state.activeModel;cb.classList.remove('hidden');}else{cb?.classList.add('hidden');}renderChatInput();}
+   160→function startUptime(){if(state.uptimeTimer||!state.runStartedAt)return;const t=()=>{if(!state.runStartedAt)return;const s=Math.floor((Date.now()-state.runStartedAt)/1000);$('#uptime').textContent=`${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;};t();state.uptimeTimer=setInterval(t,1000);}
+   161→function stopUptime(){if(state.uptimeTimer){clearInterval(state.uptimeTimer);state.uptimeTimer=null;}}
+   162→function renderFiles(){
+   163→  // Split files into models and datasets
+   164→  const models=state.files.filter(f=>['llm','config','other'].includes(f.category));
+   165→  const datasets=state.files.filter(f=>['dataset','notebook'].includes(f.category));
+   166→
+   167→  // Render models list
+   168→  const ml=$('#model-list');
+   169→  if(ml){
+   170→    if(!models.length){ml.innerHTML='<div class="empty-state"><p>No models yet</p></div>';}
+   171→    else{let h='';models.forEach(f=>{const t=new Date(f.uploadedAt).toLocaleTimeString('en-US',{hour12:false});
+   172→      h+=`<div class="file-row"><span class="file-icon ${f.category}"></span><div class="file-info"><div class="file-name">${escapeHtml(f.name)}</div><div class="file-meta">${f.humanSize} · ${t}</div></div><button class="file-delete" data-id="${f.id}" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>`;});
+   173→    ml.innerHTML=h;ml.querySelectorAll('.file-delete').forEach(b=>b.addEventListener('click',()=>deleteFile(b.dataset.id)));}
+   174→  }
+   175→
+   176→  // Render datasets list
+   177→  const dl=$('#dataset-list');
+   178→  if(dl){
+   179→    if(!datasets.length){dl.innerHTML='<div class="empty-state"><p>No datasets yet</p></div>';}
+   180→    else{let h='';datasets.forEach(f=>{const t=new Date(f.uploadedAt).toLocaleTimeString('en-US',{hour12:false});
+   181→      h+=`<div class="file-row"><span class="file-icon ${f.category}"></span><div class="file-info"><div class="file-name">${escapeHtml(f.name)}</div><div class="file-meta">${f.humanSize} · ${t}</div></div><button class="file-delete" data-id="${f.id}" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>`;});
+   182→    dl.innerHTML=h;dl.querySelectorAll('.file-delete').forEach(b=>b.addEventListener('click',()=>deleteFile(b.dataset.id)));}
+   183→  }
+   184→
+   185→  // Update clear buttons
+   186→  const cbm=$('#clear-models-btn');if(cbm)cbm.classList.toggle('hidden',!models.length);
+   187→  const cbd=$('#clear-datasets-btn');if(cbd)cbd.classList.toggle('hidden',!datasets.length);
+   188→  // Update footer
+   189→  const ff=$('#footer-files');if(ff)ff.textContent=state.files.length;
+   190→}
+   191→function renderConsole(){const o=$('#console-output');$('#console-count').textContent=`${state.consoleLines.length} lines`;if(!state.consoleLines.length){o.innerHTML='<div class="console-empty">No output yet.</div>';return;}const I={info:'ℹ',warn:'⚠',error:'✗',success:'✓'};let h='';state.consoleLines.forEach(l=>{const ts=new Date(l.ts).toLocaleTimeString('en-US',{hour12:false});h+=`<div class="console-line ${l.level}"><span class="ts">${ts}</span><span class="level">${I[l.level]||'ℹ'}</span><span class="text">${escapeHtml(l.text)}</span></div>`;});o.innerHTML=h;o.scrollTop=o.scrollHeight;}
+   192→function renderChatMessages(){const c=$('#chat-messages');if(!state.chatMessages.length){const sub=state.runState!=='running'?'Click Run to load model first.':'Type a message and press Cmd/Ctrl+Enter.';c.innerHTML=`<div class="chat-empty"><p class="ce-sub">${sub}</p></div>`;return;}const UA='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';const AA='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>';let h='';state.chatMessages.forEach(m=>{const iu=m.role==='user';let c2=escapeHtml(m.content);if(m.streaming&&!m.content)c2='<span class="chat-thinking">thinking…</span>';else if(m.streaming)c2+='<span class="chat-cursor"></span>';const meta=m.latencyMs?`<div class="chat-meta">${(m.latencyMs/1000).toFixed(2)}s</div>`:'';h+=`<div class="chat-message ${m.role}"><div class="chat-avatar ${m.role}">${iu?UA:AA}</div><div class="chat-bubble-wrap"><div class="chat-bubble">${c2}</div>${meta}</div></div>`;});c.innerHTML=h;c.scrollTop=c.scrollHeight;}
+   193→function renderChatInput(){const i=$('#chat-input'),s=$('#chat-send-btn'),b=$('#chat-stop-btn');if(state.runState==='running'||webllmEngine||wllamaInstance){i.disabled=false;i.placeholder='Type a message… (Cmd/Ctrl+Enter)';}else{i.disabled=true;i.placeholder='Run model first…';}if(state.chatStreaming){s.classList.add('hidden');b.classList.remove('hidden');}else{s.classList.remove('hidden');b.classList.add('hidden');s.disabled=!(state.runState==='running'||webllmEngine||wllamaInstance)||!i.value.trim();}}
+   194→function renderBenchmark(){const e=$('#benchmark-empty'),c=$('#benchmark-content'),p=$('#benchmark-tab-pulse');if(!state.benchmarkResults.length){e.classList.remove('hidden');c.classList.add('hidden');p.classList.add('hidden');return;}e.classList.add('hidden');c.classList.remove('hidden');p.classList.remove('hidden');renderVerdict();renderDimScores();renderRadarChart();renderBarChart();renderTestHistory();renderCompareSelect();}
+   195→function renderVerdict(){const v=computeVerdict();const tc=state.benchmarkResults.length;$('#verdict-tests-count').textContent=`${tc} test${tc===1?'':'s'}`;if(!v){$('#verdict-main').innerHTML='<span class="dim">No data.</span>';$('#verdict-detail').textContent='';$('#verdict-report').innerHTML='';return;}const cl=v.closest,op=Math.abs(cl.diff)<=3;let mh;if(op)mh=`Setara dengan <span class="highlight">${cl.name}</span> <span class="dim">(${Math.abs(cl.diff)} poin · ${v.userOverall} vs ${cl.overall})</span>`;else if(cl.diff>0)mh=`Mengalahkan <span class="highlight">${cl.name}</span> <span class="dim">(+${cl.diff} poin · ${v.userOverall} vs ${cl.overall})</span>`;else mh=`Kalah tipis dari <span class="highlight">${cl.name}</span> <span class="dim">(${Math.abs(cl.diff)} poin · ${v.userOverall} vs ${cl.overall})</span>`;$('#verdict-main').innerHTML=mh;const paramsInfo=state.userModelParamsB>0?` · Your model: ${state.userModelParamsB}B params`:'';$('#verdict-detail').textContent=`Skor: ${v.userOverall}/100 dari ${tc} test. Dibandingkan ${v.comparisons.length} LLM dengan parameter serupa${paramsInfo}`;const onPar=v.comparisons.filter(c=>c.key!==cl.key&&Math.abs(c.diff)<=3);const beats=v.beats.filter(c=>c.key!==cl.key);const loses=v.losesTo.filter(c=>c.key!==cl.key);let h='';h+=`<div class="report-section"><div class="report-section-header"><span class="report-section-title neutral">Setara dengan</span><span class="report-section-count">${onPar.length} LLM</span></div>`;if(!onPar.length)h+=`<div class="report-empty">Tidak ada yang setara.</div>`;else{h+=`<div class="report-list">`;onPar.forEach(c=>{h+=`<div class="report-row neutral"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff neutral">${c.diff>0?'+':''}${c.diff}</span></div>`;});h+=`</div>`;}h+=`</div>`;h+=`<div class="report-section"><div class="report-section-header"><span class="report-section-title pos">Mengalahkan</span><span class="report-section-count">${beats.length} LLM</span></div>`;if(!beats.length)h+=`<div class="report-empty">Belum mengalahkan LLM manapun.</div>`;else{h+=`<div class="report-list">`;beats.forEach(c=>{h+=`<div class="report-row pos"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff pos">+${c.diff}</span></div>`;});h+=`</div>`;}h+=`</div>`;h+=`<div class="report-section"><div class="report-section-header"><span class="report-section-title neg">Kalah dari</span><span class="report-section-count">${loses.length} LLM</span></div>`;if(!loses.length)h+=`<div class="report-empty">Tidak ada yang lebih kuat — juara!</div>`;else{h+=`<div class="report-list">`;loses.forEach(c=>{h+=`<div class="report-row neg"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff neg">${c.diff}</span></div>`;});h+=`</div>`;}h+=`</div>`;h+=`<div class="report-source">Source: ${escapeHtml(state.benchmarkSource||'static fallback')}${paramsInfo}</div>`;$('#verdict-report').innerHTML=h;}
+   196→function renderDimScores(){const s=aggScores();const c=$('#dim-scores');if(!s){c.innerHTML='';return;}let h='';DIMENSIONS.forEach(d=>{const v=s[d.key];h+=`<div class="dim-row"><div class="dim-label-row"><span class="dim-label">${d.label}</span><span class="dim-value">${v}/100</span></div><div class="dim-bar-bg"><div class="dim-bar"style="width:${v}%"></div></div><div class="dim-hint">${d.hint}</div></div>`;});c.innerHTML=h;}
+   197→function renderCompareSelect(){const s=$('#radar-compare-select');if(!s)return;const b=Object.keys(state.benchmarks).length?state.benchmarks:BENCHMARKS_FALLBACK;let o='';Object.entries(b).forEach(([k,v])=>{o+=`<option value="${k}">${v.name}</option>`;});s.innerHTML=o;s.value=state.radarCompareKey in b?state.radarCompareKey:Object.keys(b)[0]||'';state.radarCompareKey=s.value;}
+   198→function renderRadarChart(){const s=aggScores();if(!s)return;const b=Object.keys(state.benchmarks).length?state.benchmarks:BENCHMARKS_FALLBACK;const cmp=b[state.radarCompareKey];const cs=llmB2D(cmp);$('#radar-compare-name').textContent=cmp?cmp.name:'—';const svg=$('#radar-user'),W=320,H=280,cx=W/2,cy=H/2+8,R=95,n=DIMENSIONS.length;let h='';for(let i=1;i<=5;i++){const r=R*i/5;const p=DIMENSIONS.map((_,j)=>{const a=-Math.PI/2+j*2*Math.PI/n;return`${(cx+r*Math.cos(a)).toFixed(1)},${(cy+r*Math.sin(a)).toFixed(1)}`;}).join(' ');h+=`<polygon points="${p}" fill="none" stroke="${i===5?'#3f3f46':'#27272a'}" stroke-width="1"/>`;}DIMENSIONS.forEach((d,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;h+=`<line x1="${cx}" y1="${cy}" x2="${(cx+R*Math.cos(a)).toFixed(1)}" y2="${(cy+R*Math.sin(a)).toFixed(1)}" stroke="#3f3f46" stroke-width="1"/>`;const lx=cx+(R+22)*Math.cos(a),ly=cy+(R+22)*Math.sin(a);h+=`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" fill="#a1a1aa" font-size="10" font-weight="500" text-anchor="middle" dominant-baseline="middle">${d.label}</text>`;h+=`<text x="${lx.toFixed(1)}" y="${(ly+12).toFixed(1)}" fill="#10b981" font-size="9" font-family="JetBrains Mono" text-anchor="middle">${s[d.key]}</text>`;});if(cs){const cp=DIMENSIONS.map((d,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;const r=R*(cs[d.key]/100);return`${(cx+r*Math.cos(a)).toFixed(1)},${(cy+r*Math.sin(a)).toFixed(1)}`;}).join(' ');h+=`<polygon points="${cp}" fill="rgba(161,161,170,0.10)" stroke="#71717a" stroke-width="1.5" stroke-dasharray="3,2"/>`;}const up=DIMENSIONS.map((d,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;const r=R*(s[d.key]/100);return`${(cx+r*Math.cos(a)).toFixed(1)},${(cy+r*Math.sin(a)).toFixed(1)}`;}).join(' ');h+=`<polygon points="${up}" fill="rgba(16,185,129,0.30)" stroke="#10b981" stroke-width="2"/>`;DIMENSIONS.forEach((d,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;const r=R*(s[d.key]/100);h+=`<circle cx="${(cx+r*Math.cos(a)).toFixed(1)}" cy="${(cy+r*Math.sin(a)).toFixed(1)}" r="3" fill="#10b981"/>`;});svg.innerHTML=h;}
+   199→function renderBarChart(){const u=aggOverall();const svg=$('#bar-chart'),W=700,pad={left:140,right:60,top:10,bottom:10},bH=22,rH=32,cW=W-pad.left-pad.right;const b=Object.keys(state.benchmarks).length?state.benchmarks:BENCHMARKS_FALLBACK;const rows=[{name:"Your LLM",score:u,color:'#10b981',isUser:true}];Object.entries(b).forEach(([k,v])=>rows.push({name:v.name,score:llmOS(v),color:v.color}));rows.sort((a,b)=>b.score-a.score);const H=pad.top+pad.bottom+rows.length*rH;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);let h='';[25,50,75,100].forEach(v=>{const x=pad.left+cW*v/100;h+=`<line x1="${x}" y1="${pad.top}" x2="${x}" y2="${H-pad.bottom}" stroke="#27272a" stroke-width="1" stroke-dasharray="2,3"/>`;h+=`<text x="${x}" y="${H-2}" fill="#52525b" font-size="9" text-anchor="middle">${v}</text>`;});rows.forEach((r,i)=>{const y=pad.top+i*rH+4;h+=`<text x="${pad.left-8}" y="${y+bH/2+4}" fill="${r.isUser?'#10b981':'#a1a1aa'}" font-size="11" font-weight="${r.isUser?700:500}" text-anchor="end">${r.name}</text>`;h+=`<rect x="${pad.left}" y="${y}" width="${cW}" height="${bH}" fill="#27272a" rx="2"/>`;const bw=cW*r.score/100;h+=`<rect x="${pad.left}" y="${y}" width="${bw.toFixed(1)}" height="${bH}" fill="${r.color}" rx="2" ${r.isUser?'stroke="#34d399" stroke-width="1"':''}/>`;h+=`<text x="${(pad.left+bw+6).toFixed(1)}" y="${y+bH/2+4}" fill="${r.color}" font-size="11" font-weight="700" font-family="JetBrains Mono">${r.score}</text>`;});svg.innerHTML=h;}
+   200→function renderTestHistory(){const c=$('#test-history');if(!state.benchmarkResults.length){c.innerHTML='<div class="th-empty">No tests.</div>';return;}let h='';[...state.benchmarkResults].reverse().forEach(r=>{const t=new Date(r.ts).toLocaleTimeString('en-US',{hour12:false});const p=r.prompt.length>60?r.prompt.slice(0,60)+'…':r.prompt;h+=`<div class="th-row"><span class="th-time">${t}</span><span class="th-prompt"title="${escapeHtml(r.prompt)}">${escapeHtml(p)}</span><span class="th-score">${r.analysis.overall}/100</span></div>`;});c.innerHTML=h;}
+   201→function switchTab(n){$$('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===n));$$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id===`tab-${n}`));}
+   202→function wireDropzone(){
+   203→  // Models dropzone
+   204→  const dzM=$('#dropzone-model'),inpM=$('#file-input-model');
+   205→  if(dzM&&inpM){
+   206→    dzM.addEventListener('click',()=>inpM.click());
+   207→    dzM.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inpM.click();}});
+   208→    inpM.addEventListener('change',()=>{if(inpM.files.length)uploadFiles(inpM.files);inpM.value='';});
+   209→    ['dragenter','dragover'].forEach(e=>dzM.addEventListener(e,ev=>{ev.preventDefault();ev.stopPropagation();dzM.classList.add('drag-over');}));
+   210→    ['dragleave','drop'].forEach(e=>dzM.addEventListener(e,ev=>{ev.preventDefault();ev.stopPropagation();dzM.classList.remove('drag-over');}));
+   211→    dzM.addEventListener('drop',e=>{if(e.dataTransfer.files?.length)uploadFiles(e.dataTransfer.files);});
+   212→  }
+   213→  // Datasets dropzone
+   214→  const dzD=$('#dropzone-dataset'),inpD=$('#file-input-dataset');
+   215→  if(dzD&&inpD){
+   216→    dzD.addEventListener('click',()=>inpD.click());
+   217→    dzD.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inpD.click();}});
+   218→    inpD.addEventListener('change',()=>{if(inpD.files.length)uploadFiles(inpD.files);inpD.value='';});
+   219→    ['dragenter','dragover'].forEach(e=>dzD.addEventListener(e,ev=>{ev.preventDefault();ev.stopPropagation();dzD.classList.add('drag-over');}));
+   220→    ['dragleave','drop'].forEach(e=>dzD.addEventListener(e,ev=>{ev.preventDefault();ev.stopPropagation();dzD.classList.remove('drag-over');}));
+   221→    dzD.addEventListener('drop',e=>{if(e.dataTransfer.files?.length)uploadFiles(e.dataTransfer.files);});
+   222→  }
+   223→  // Global drag/drop prevention
+   224→  window.addEventListener('dragover',e=>e.preventDefault());
+   225→  window.addEventListener('drop',e=>{e.preventDefault();});
+   226→}
+   227→
+   228→async function init(){
+   229→  connectSocket(); wireDropzone();
+   230→  $$('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+   231→  $('#run-btn').addEventListener('click',handleRun);
+   232→  $('#stop-btn').addEventListener('click',handleStop);
+   233→  $('#clear-models-btn')?.addEventListener('click',async()=>{for(const f of state.files.filter(f=>['llm','config','other'].includes(f.category))){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=state.files.filter(f=>!['llm','config','other'].includes(f.category));log('Models cleared.','info');renderFiles();populateModelSelects();renderRunState();});
+   234→  $('#clear-datasets-btn')?.addEventListener('click',async()=>{for(const f of state.files.filter(f=>['dataset','notebook'].includes(f.category))){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=state.files.filter(f=>!['dataset','notebook'].includes(f.category));log('Datasets cleared.','info');renderFiles();populateModelSelects();renderRunState();});
+   235→  $('#clear-console-btn').addEventListener('click',()=>{state.consoleLines=[];renderConsole();});
+   236→  $('#chat-input').addEventListener('input',renderChatInput);
+   237→  $('#chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();sendMessage();}});
+   238→  $('#chat-send-btn').addEventListener('click',sendMessage);
+   239→  $('#chat-stop-btn').addEventListener('click',stopChat);
+   240→  $('#clear-chat-btn').addEventListener('click',clearChat);
+   241→  $('#radar-compare-select').addEventListener('change',e=>{state.radarCompareKey=e.target.value;renderRadarChart();});
+   242→  $('#clear-benchmark-btn').addEventListener('click',()=>{state.benchmarkResults=[];renderBenchmark();log('Benchmark cleared.','info');});
+   243→  // Test tab: pretrained vs trained
+   244→  $$('.llm-tab').forEach(t=>t.addEventListener('click',()=>setLlmMode(t.dataset.mode)));
+   245→  $('#load-pretrained-btn')?.addEventListener('click',handleLoadPretrained);
+   246→  $('#load-trained-btn')?.addEventListener('click',handleLoadTrained);
+   247→  $('#pretrained-model-select')?.addEventListener('change',()=>{$('#load-pretrained-btn').disabled=!$('#pretrained-model-select').value;});
+   248→  // Train tab
+   249→  $('#train-model-select')?.addEventListener('change',updateTrainButton);
+   250→  $('#train-dataset-select')?.addEventListener('change',updateTrainButton);
+   251→  $('#start-train-btn')?.addEventListener('click',handleStartTrain);
+   252→  await fetchDeviceInfo(); await fetchBenchmarks(); await fetchLocalLlms(); await refreshFiles();
+   253→  renderConnection(); renderDeviceInfo(); renderFiles(); renderRunState(); renderConsole(); renderChatMessages(); renderChatInput(); renderBenchmark(); populateModelSelects();
+   254→}
+   255→document.addEventListener('DOMContentLoaded',init);
+   256→

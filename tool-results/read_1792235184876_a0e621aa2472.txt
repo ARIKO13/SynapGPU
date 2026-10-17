@@ -1,0 +1,502 @@
+     1→<!DOCTYPE html>
+     2→<html lang="en" class="dark">
+     3→<head>
+     4→  <meta charset="UTF-8" />
+     5→  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     6→  <title>SynapGPU</title>
+     7→  <meta name="description" content="WebGPU-style notebook: drag & drop LLM/dataset, click Run, monitor GPU/RAM/SSD in real time, test and benchmark your model." />
+     8→  <link rel="preconnect" href="https://fonts.googleapis.com" />
+     9→  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    10→  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    11→  <link rel="stylesheet" href="/static/css/styles.css" />
+    12→  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%2310b981'/></svg>" />
+    13→</head>
+    14→<body>
+    15→  <div class="app">
+    16→    <header class="header">
+    17→      <div class="brand">
+    18→        <div class="logo">
+    19→          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    20→            <circle cx="7" cy="12" r="2.5"/>
+    21→            <circle cx="17" cy="7" r="2"/>
+    22→            <circle cx="17" cy="17" r="2"/>
+    23→            <path d="M9.5 11 L15 8"/>
+    24→            <path d="M9.5 13 L15 16"/>
+    25→          </svg>
+    26→        </div>
+    27→        <div class="brand-text">
+    28→          <div class="brand-name">SynapGPU</div>
+    29→          <div class="brand-tag">Local LLM · Real Device Specs · Benchmark</div>
+    30→        </div>
+    31→      </div>
+    32→      <div class="header-right">
+    33→        <a href="https://github.com/ARIKO13/SynapGPU/releases/latest" target="_blank" rel="noopener" class="btn btn-download" id="download-btn">
+    34→          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    35→          <span>Download Desktop</span>
+    36→        </a>
+    37→        <div id="model-badge" class="model-badge hidden">
+    38→          <span class="indicator-dot pulse"></span>
+    39→          <span class="label">model</span>
+    40→          <span id="active-model" class="model-name">—</span>
+    41→          <span class="sep">·</span>
+    42→          <span id="uptime" class="uptime">00:00:00</span>
+    43→        </div>
+    44→        <div id="conn-status" class="conn-pill offline">
+    45→          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-wifi">
+    46→            <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+    47→            <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+    48→            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+    49→            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+    50→          </svg>
+    51→          <span id="conn-text">offline</span>
+    52→        </div>
+    53→        <button id="run-btn" class="btn btn-primary" disabled>
+    54→          <svg viewBox="0 0 24 24" fill="currentColor" class="icon-play"><polygon points="5,3 19,12 5,21"></polygon></svg>
+    55→          <span>Run</span>
+    56→        </button>
+    57→        <button id="stop-btn" class="btn btn-danger hidden">
+    58→          <svg viewBox="0 0 24 24" fill="currentColor" class="icon-stop"><rect x="6" y="6" width="12" height="12"></rect></svg>
+    59→          <span>Stop</span>
+    60→        </button>
+    61→      </div>
+    62→    </header>
+    63→
+    64→    <div class="body">
+    65→      <aside class="sidebar">
+    66→        <!-- Models section -->
+    67→        <div class="sidebar-section">
+    68→          <div class="sidebar-header">
+    69→            <span class="sidebar-title">Models</span>
+    70→            <button id="clear-models-btn" class="btn-ghost hidden">Clear</button>
+    71→          </div>
+    72→          <div id="dropzone-model" class="dropzone" tabindex="0">
+    73→            <input id="file-input-model" type="file" multiple accept=".gguf,.bin,.safetensors,.pt,.pth,.onnx,.ggmf,.ckpt,.h5,.pb,.tflite,.modelfile" hidden />
+    74→            <p class="dz-primary">Drop .gguf models</p>
+    75→            <p class="dz-secondary">or click to browse</p>
+    76→          </div>
+    77→          <div id="model-list" class="file-list">
+    78→            <div class="empty-state"><p>No models yet</p></div>
+    79→          </div>
+    80→        </div>
+    81→
+    82→        <!-- Datasets section -->
+    83→        <div class="sidebar-section">
+    84→          <div class="sidebar-header">
+    85→            <span class="sidebar-title">Datasets</span>
+    86→            <button id="clear-datasets-btn" class="btn-ghost hidden">Clear</button>
+    87→          </div>
+    88→          <div id="dropzone-dataset" class="dropzone" tabindex="0">
+    89→            <input id="file-input-dataset" type="file" multiple accept=".json,.jsonl,.csv,.tsv,.parquet,.arrow,.feather,.txt,.zst,.zstd,.zip" hidden />
+    90→            <p class="dz-primary">Drop datasets</p>
+    91→            <p class="dz-secondary">.jsonl .csv .parquet .zst .zip</p>
+    92→          </div>
+    93→          <div id="dataset-list" class="file-list">
+    94→            <div class="empty-state"><p>No datasets yet</p></div>
+    95→          </div>
+    96→        </div>
+    97→      </aside>
+    98→
+    99→      <main class="main">
+   100→        <div class="tabs-bar">
+   101→          <button class="tab active" data-tab="dashboard">
+   102→            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+   103→            <span>Dashboard</span>
+   104→          </button>
+   105→          <button class="tab" data-tab="train">
+   106→            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+   107→            <span>Train</span>
+   108→            <span id="train-tab-pulse" class="tab-pulse hidden"></span>
+   109→          </button>
+   110→          <button class="tab" data-tab="chat">
+   111→            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+   112→            <span>Test</span>
+   113→            <span id="chat-tab-pulse" class="tab-pulse hidden"></span>
+   114→          </button>
+   115→          <button class="tab" data-tab="benchmark">
+   116→            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+   117→            <span>Benchmark</span>
+   118→            <span id="benchmark-tab-pulse" class="tab-pulse hidden"></span>
+   119→          </button>
+   120→          <button class="tab" data-tab="console">
+   121→            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+   122→            <span>Console</span>
+   123→          </button>
+   124→        </div>
+   125→
+   126→        <section id="tab-dashboard" class="tab-panel active">
+   127→          <div id="dashboard-loading" class="dashboard-loading">
+   128→            <div class="spinner"></div>
+   129→            <p>Connecting…</p>
+   130→          </div>
+   131→          <div id="dashboard-content" class="dashboard-content hidden">
+   132→            <div class="status-bar">
+   133→              <span class="status-dot" id="status-dot"></span>
+   134→              <span id="status-text" class="status-text">System idle</span>
+   135→              <span id="status-time" class="status-time"></span>
+   136→            </div>
+   137→            <div class="device-info-card" id="device-info-card">
+   138→              <div class="di-header">
+   139→                <span>Device</span>
+   140→                <span id="di-hostname" class="di-hostname"></span>
+   141→              </div>
+   142→              <div class="di-grid">
+   143→                <div class="di-item">
+   144→                  <span class="di-label">CPU</span>
+   145→                  <span id="di-cpu" class="di-value">—</span>
+   146→                </div>
+   147→                <div class="di-item">
+   148→                  <span class="di-label">Cores</span>
+   149→                  <span id="di-cores" class="di-value">—</span>
+   150→                </div>
+   151→                <div class="di-item">
+   152→                  <span class="di-label">RAM</span>
+   153→                  <span id="di-ram" class="di-value">—</span>
+   154→                </div>
+   155→                <div class="di-item">
+   156→                  <span class="di-label">Disk</span>
+   157→                  <span id="di-disk" class="di-value">—</span>
+   158→                </div>
+   159→                <div class="di-item">
+   160→                  <span class="di-label">GPU</span>
+   161→                  <span id="di-gpu" class="di-value">—</span>
+   162→                </div>
+   163→                <div class="di-item">
+   164→                  <span class="di-label">VRAM</span>
+   165→                  <span id="di-vram" class="di-value">—</span>
+   166→                </div>
+   167→              </div>
+   168→            </div>
+   169→            <div id="gpu-unavailable" class="gpu-unavailable hidden">
+   170→              <div class="gu-icon">
+   171→                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+   172→              </div>
+   173→              <div class="gu-content">
+   174→                <p class="gu-title">No GPU detected</p>
+   175→                <p class="gu-sub">nvidia-smi not found on this host. GPU metrics are disabled. Install nvidia drivers or run on a GPU machine to see real GPU usage.</p>
+   176→              </div>
+   177→            </div>
+   178→            <div id="gpu-metrics-grid" class="metric-grid hidden">
+   179→              <div class="metric-card" data-accent="emerald">
+   180→                <div class="metric-header">
+   181→                  <span class="metric-label">GPU Util</span>
+   182→                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="metric-icon"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+   183→                </div>
+   184→                <div class="metric-value"><span id="gpu-util">0.0</span>%</div>
+   185→                <div class="metric-progress"><div id="gpu-util-bar" class="progress-bar"></div></div>
+   186→                <div class="metric-footer">VRAM <span id="gpu-vram">0.0</span>/<span id="gpu-vram-total">24</span> GB</div>
+   187→              </div>
+   188→              <div class="metric-card" data-accent="cyan">
+   189→                <div class="metric-header">
+   190→                  <span class="metric-label">GPU Memory</span>
+   191→                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="metric-icon"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="14"/><line x1="10" y1="10" x2="10" y2="14"/><line x1="14" y1="10" x2="14" y2="14"/><line x1="18" y1="10" x2="18" y2="14"/></svg>
+   192→                </div>
+   193→                <div class="metric-value"><span id="gpu-mem">0.0</span>%</div>
+   194→                <div class="metric-progress"><div id="gpu-mem-bar" class="progress-bar"></div></div>
+   195→                <div class="metric-footer"><svg id="gpu-mem-spark" class="sparkline" viewBox="0 0 200 40" preserveAspectRatio="none"></svg></div>
+   196→              </div>
+   197→            </div>
+   198→            <div id="cpu-metrics-grid" class="metric-grid">
+   199→              <div class="metric-card" data-accent="emerald">
+   200→                <div class="metric-header">
+   201→                  <span class="metric-label">CPU Util</span>
+   202→                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="metric-icon"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+   203→                </div>
+   204→                <div class="metric-value"><span id="cpu-util">0.0</span>%</div>
+   205→                <div class="metric-progress"><div id="cpu-util-bar" class="progress-bar"></div></div>
+   206→                <div class="metric-footer"><span id="cpu-cores-footer">— cores</span></div>
+   207→              </div>
+   208→              <div class="metric-card" data-accent="amber">
+   209→                <div class="metric-header">
+   210→                  <span class="metric-label">RAM</span>
+   211→                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="metric-icon"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+   212→                </div>
+   213→                <div class="metric-value"><span id="ram-pct">0</span>%</div>
+   214→                <div class="metric-sub"><span id="ram-used">0</span>/<span id="ram-total">64</span> GB</div>
+   215→                <div class="metric-progress"><div id="ram-bar" class="progress-bar"></div></div>
+   216→                <div class="metric-footer"><svg id="ram-spark" class="sparkline" viewBox="0 0 200 40" preserveAspectRatio="none"></svg></div>
+   217→              </div>
+   218→              <div class="metric-card" data-accent="rose">
+   219→                <div class="metric-header">
+   220→                  <span class="metric-label">SSD</span>
+   221→                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="metric-icon"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
+   222→                </div>
+   223→                <div class="metric-value"><span id="ssd-pct">0.0</span>%</div>
+   224→                <div class="metric-sub"><span id="ssd-used">0</span>/<span id="ssd-total">1024</span> GB</div>
+   225→                <div class="metric-progress"><div id="ssd-bar" class="progress-bar"></div></div>
+   226→                <div class="metric-footer">R <span id="ssd-read">0</span> · W <span id="ssd-write">0</span> MB/s</div>
+   227→              </div>
+   228→              <div class="metric-card-sm" data-accent="amber">
+   229→                <span class="sm-label">GPU Temp</span>
+   230→                <span class="sm-value" id="gpu-temp-wrap">—</span>
+   231→              </div>
+   232→              <div class="metric-card-sm" data-accent="amber">
+   233→                <span class="sm-label">GPU Power</span>
+   234→                <span class="sm-value" id="gpu-power-wrap">—</span>
+   235→              </div>
+   236→              <div class="metric-card-sm" data-accent="cyan">
+   237→                <span class="sm-label">Net RX</span>
+   238→                <span class="sm-value"><span id="net-rx">0.0</span> Mbps</span>
+   239→              </div>
+   240→              <div class="metric-card-sm" data-accent="cyan">
+   241→                <span class="sm-label">Net TX</span>
+   242→                <span class="sm-value"><span id="net-tx">0.0</span> Mbps</span>
+   243→              </div>
+   244→            </div>
+   245→            <div id="ssd-chart-card" class="chart-card">
+   246→              <div class="chart-header">
+   247→                <span class="chart-title">SSD Throughput · 60s</span>
+   248→                <span class="chart-avg">R <span id="ssd-read-2">0</span> · W <span id="ssd-write-2">0</span> MB/s</span>
+   249→              </div>
+   250→              <svg id="ssd-chart" class="chart" viewBox="0 0 800 50" preserveAspectRatio="none"></svg>
+   251→            </div>
+   252→            <div id="gpu-chart-card" class="chart-card hidden">
+   253→              <div class="chart-header">
+   254→                <span class="chart-title">GPU Utilization · 60s</span>
+   255→                <span class="chart-avg"><span id="gpu-avg">0.0</span>% avg</span>
+   256→              </div>
+   257→              <svg id="gpu-chart" class="chart" viewBox="0 0 800 100" preserveAspectRatio="none"></svg>
+   258→            </div>
+   259→            <!-- Multi-GPU details (all GPUs on the system) -->
+   260→            <div id="multi-gpu-section" class="multi-device-section hidden">
+   261→              <div class="mds-header">
+   262→                <span class="mds-title">All GPUs</span>
+   263→                <span id="gpu-count-badge" class="mds-count">0</span>
+   264→              </div>
+   265→              <div id="multi-gpu-list" class="mds-list"></div>
+   266→            </div>
+   267→            <!-- Multi-disk details (all storage partitions) -->
+   268→            <div id="multi-disk-section" class="multi-device-section hidden">
+   269→              <div class="mds-header">
+   270→                <span class="mds-title">All Storage</span>
+   271→                <span id="disk-count-badge" class="mds-count">0</span>
+   272→              </div>
+   273→              <div id="multi-disk-list" class="mds-list"></div>
+   274→            </div>
+   275→          </div>
+   276→        </section>
+   277→
+   278→        <section id="tab-train" class="tab-panel">
+   279→          <div class="train-content">
+   280→            <div class="train-card">
+   281→              <div class="tc-header"><span>Training Pipeline</span></div>
+   282→              <div class="train-step">
+   283→                <div class="ts-num">1</div>
+   284→                <div class="ts-body">
+   285→                  <div class="ts-label">Base Model</div>
+   286→                  <select id="train-model-select" class="train-select"><option value="">Select from Models ↑</option></select>
+   287→                  <p class="ts-hint">Upload .gguf to the Models section in sidebar. Any GGUF works.</p>
+   288→                </div>
+   289→              </div>
+   290→              <div class="train-step">
+   291→                <div class="ts-num">2</div>
+   292→                <div class="ts-body">
+   293→                  <div class="ts-label">Dataset</div>
+   294→                  <select id="train-dataset-select" class="train-select"><option value="">Select from Datasets ↑</option></select>
+   295→                  <p class="ts-hint">Upload to Datasets section. Supports .jsonl .csv .parquet .zst .arrow .txt</p>
+   296→                </div>
+   297→              </div>
+   298→              <div class="train-step">
+   299→                <div class="ts-num">3</div>
+   300→                <div class="ts-body">
+   301→                  <div class="ts-label">Parameters</div>
+   302→                  <div class="train-params">
+   303→                    <div class="param-row"><span class="param-label">Epochs</span><input type="number" id="train-epochs" value="3" min="1" max="100" class="param-input" /></div>
+   304→                    <div class="param-row"><span class="param-label">Learning Rate</span><input type="text" id="train-lr" value="1e-4" class="param-input" /></div>
+   305→                    <div class="param-row"><span class="param-label">Batch Size</span><input type="number" id="train-batch" value="4" min="1" max="128" class="param-input" /></div>
+   306→                    <div class="param-row"><span class="param-label">Context</span><input type="number" id="train-ctx" value="2048" min="512" max="8192" class="param-input" /></div>
+   307→                    <div class="param-row"><span class="param-label">Method</span><select id="train-method" class="param-input"><option value="lora">LoRA</option><option value="full">Full Fine-tune</option></select></div>
+   308→                    <div class="param-row"><span class="param-label">Output</span><input type="text" id="train-output" value="trained-model" class="param-input" /></div>
+   309→                  </div>
+   310→                </div>
+   311→              </div>
+   312→              <div class="train-step">
+   313→                <div class="ts-num">4</div>
+   314→                <div class="ts-body"><button id="start-train-btn" class="btn btn-primary" disabled><span>Start Training</span></button></div>
+   315→              </div>
+   316→            </div>
+   317→            <div id="train-progress" class="train-progress hidden">
+   318→              <div class="tp-header"><span class="tp-title">Progress</span><span id="tp-status" class="tp-status">Idle</span></div>
+   319→              <div class="tp-stats">
+   320→                <div class="tp-stat"><span class="tps-label">Epoch</span><span id="tp-epoch" class="tps-value">0/0</span></div>
+   321→                <div class="tp-stat"><span class="tps-label">Loss</span><span id="tp-loss" class="tps-value">—</span></div>
+   322→                <div class="tp-stat"><span class="tps-label">Params</span><span id="tp-params" class="tps-value">—</span></div>
+   323→                <div class="tp-stat"><span class="tps-label">Iter</span><span id="tp-iter" class="tps-value">0</span></div>
+   324→                <div class="tp-stat"><span class="tps-label">Speed</span><span id="tp-speed" class="tps-value">—</span></div>
+   325→                <div class="tp-stat"><span class="tps-label">ETA</span><span id="tp-eta" class="tps-value">—</span></div>
+   326→              </div>
+   327→              <div class="tp-bar-bg"><div id="tp-bar" class="tp-bar"></div></div>
+   328→              <div id="tp-log" class="tp-log"></div>
+   329→            </div>
+   330→            <div class="train-card">
+   331→              <div class="tc-header"><span>Training Backend</span></div>
+   332→              <div id="train-backend-status" class="train-backend-status">Checking…</div>
+   333→            </div>
+   334→          </div>
+   335→        </section>
+   336→
+   337→        <section id="tab-console" class="tab-panel">
+   338→          <div class="console-header">
+   339→            <div class="ch-left">
+   340→              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+   341→              <span>Console</span>
+   342→              <span id="console-count" class="console-count">0 lines</span>
+   343→            </div>
+   344→            <button id="clear-console-btn" class="btn-ghost">Clear</button>
+   345→          </div>
+   346→          <div id="console-output" class="console-output">
+   347→            <div class="console-empty">No output yet. Drop a file and click Run.</div>
+   348→          </div>
+   349→        </section>
+   350→
+   351→        <section id="tab-chat" class="tab-panel">
+   352→          <div class="chat-header">
+   353→            <div class="ch-left">
+   354→              <span>Test Model</span>
+   355→              <span id="chat-model-badge" class="chat-model-badge hidden">—</span>
+   356→            </div>
+   357→            <button id="clear-chat-btn" class="btn-ghost">Clear</button>
+   358→          </div>
+   359→
+   360→          <!-- Two model sources: Pre-trained vs Trained -->
+   361→          <div class="llm-loader">
+   362→            <div class="llm-tabs">
+   363→              <button class="llm-tab active" data-mode="pretrained">Pre-trained Model</button>
+   364→              <button class="llm-tab" data-mode="trained">Trained Model</button>
+   365→            </div>
+   366→
+   367→            <!-- Pre-trained: from Models sidebar -->
+   368→            <div id="llm-pretrained" class="llm-mode">
+   369→              <div class="llm-loader-row">
+   370→                <span class="llm-label">Model</span>
+   371→                <select id="pretrained-model-select" class="llm-select">
+   372→                  <option value="">Select .gguf from Models ↑</option>
+   373→                </select>
+   374→                <button id="load-pretrained-btn" class="btn btn-primary" disabled>
+   375→                  <span>Load</span>
+   376→                </button>
+   377→              </div>
+   378→            </div>
+   379→
+   380→            <!-- Trained: output from Train tab -->
+   381→            <div id="llm-trained" class="llm-mode hidden">
+   382→              <div id="trained-model-area">
+   383→                <div class="trained-empty">No trained model yet. Go to Train tab → select model + dataset → Start Training.</div>
+   384→              </div>
+   385→              <div id="trained-model-info" class="trained-info hidden">
+   386→                <div class="ti-row"><span class="ti-label">Name</span><span id="ti-name" class="ti-value">—</span></div>
+   387→                <div class="ti-row"><span class="ti-label">Size</span><span id="ti-size" class="ti-value">—</span></div>
+   388→                <div class="ti-row"><span class="ti-label">Params</span><span id="ti-params" class="ti-value">—</span></div>
+   389→                <div class="ti-row"><span class="ti-label">Base</span><span id="ti-base" class="ti-value">—</span></div>
+   390→                <div class="ti-row"><span class="ti-label">Dataset</span><span id="ti-dataset" class="ti-value">—</span></div>
+   391→                <div class="ti-row"><span class="ti-label">Epochs</span><span id="ti-epochs" class="ti-value">—</span></div>
+   392→                <div class="ti-actions">
+   393→                  <button id="load-trained-btn" class="btn btn-primary"><span>Load & Test</span></button>
+   394→                  <a id="download-trained-btn" class="btn btn-download" download><span>Download .gguf</span></a>
+   395→                </div>
+   396→              </div>
+   397→            </div>
+   398→
+   399→            <div id="load-progress" class="load-progress hidden">
+   400→              <div class="lp-header">
+   401→                <span id="lp-text" class="lp-text">Loading…</span>
+   402→                <span id="lp-percent" class="lp-percent">0%</span>
+   403→              </div>
+   404→              <div class="lp-bar-bg"><div id="lp-bar" class="lp-bar"></div></div>
+   405→            </div>
+   406→          </div>
+   407→          </div>
+   408→
+   409→          <div id="chat-messages" class="chat-messages">
+   410→            <div class="chat-empty">
+   411→              <p id="ce-sub" class="ce-sub">Pick a preset model or upload your own .gguf file, then click Load to run an LLM directly in your browser via WebGPU.</p>
+   412→            </div>
+   413→          </div>
+   414→          <div id="chat-error" class="chat-error hidden"></div>
+   415→          <div class="chat-input-bar">
+   416→            <textarea id="chat-input" placeholder="Load a model first to chat…" rows="2" disabled></textarea>
+   417→            <button id="chat-send-btn" class="btn btn-primary btn-icon" disabled>
+   418→              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+   419→            </button>
+   420→            <button id="chat-stop-btn" class="btn btn-danger btn-icon hidden">
+   421→              <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"></rect></svg>
+   422→            </button>
+   423→          </div>
+   424→          <p class="chat-footer-note">Runs entirely in your browser — LLM inference via WebGPU or WebAssembly. No backend, no API key. Model cached for next visit.</p>
+   425→        </section>
+   426→
+   427→        <section id="tab-benchmark" class="tab-panel">
+   428→          <div id="benchmark-empty" class="benchmark-empty">
+   429→            <p class="be-sub">Send prompts in <strong>Test LLM</strong> to analyze your model's responses and compare against public LLMs (GPT-4, Claude, Llama, etc).</p>
+   430→          </div>
+   431→          <div id="benchmark-content" class="benchmark-content hidden">
+   432→            <div class="verdict-card">
+   433→              <div class="verdict-header">
+   434→                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+   435→                <span>Benchmark Report</span>
+   436→                <span id="verdict-tests-count" class="verdict-meta">0 tests</span>
+   437→              </div>
+   438→              <div id="verdict-main" class="verdict-main"></div>
+   439→              <div id="verdict-detail" class="verdict-detail"></div>
+   440→              <div id="verdict-report" class="verdict-report"></div>
+   441→            </div>
+   442→
+   443→            <div class="benchmark-grid two-col">
+   444→              <div class="benchmark-card">
+   445→                <div class="bc-header">
+   446→                  <span class="bc-title">Capability Profile</span>
+   447→                </div>
+   448→                <svg id="radar-user" class="radar-chart" viewBox="0 0 320 280"></svg>
+   449→                <div class="radar-legend">
+   450→                  <span class="legend-item"><span class="dot emerald"></span> Your LLM</span>
+   451→                  <span class="legend-item"><span class="dot zinc"></span> <span id="radar-compare-name">—</span></span>
+   452→                </div>
+   453→                <select id="radar-compare-select" class="bc-select"></select>
+   454→              </div>
+   455→              <div class="benchmark-card">
+   456→                <div class="bc-header">
+   457→                  <span class="bc-title">Dimension Scores</span>
+   458→                </div>
+   459→                <div id="dim-scores" class="dim-scores"></div>
+   460→              </div>
+   461→            </div>
+   462→
+   463→            <div class="benchmark-card">
+   464→              <div class="bc-header">
+   465→                <span class="bc-title">Overall Score Comparison</span>
+   466→              </div>
+   467→              <svg id="bar-chart" class="bar-chart" viewBox="0 0 700 320"></svg>
+   468→            </div>
+   469→
+   470→            <div class="benchmark-card">
+   471→              <div class="bc-header">
+   472→                <span class="bc-title">Test History</span>
+   473→                <button id="clear-benchmark-btn" class="btn-ghost">Clear</button>
+   474→              </div>
+   475→              <div id="test-history" class="test-history"></div>
+   476→            </div>
+   477→          </div>
+   478→        </section>
+   479→      </main>
+   480→    </div>
+   481→
+   482→    <footer class="footer">
+   483→      <div class="footer-left">
+   484→        <span id="footer-conn" class="footer-item"><span class="indicator-dot"></span> offline</span>
+   485→        <span class="sep">·</span>
+   486→        <span id="footer-run" class="footer-item">idle</span>
+   487→        <span class="sep">·</span>
+   488→        <span class="footer-item"><span id="footer-files">0</span> files</span>
+   489→      </div>
+   490→      <div class="footer-right">
+   491→        <span class="footer-item">GPU <span id="footer-gpu">0</span>%</span>
+   492→        <span class="footer-item">RAM <span id="footer-ram">0</span>%</span>
+   493→        <span class="footer-item">SSD <span id="footer-ssd">0</span>%</span>
+   494→      </div>
+   495→    </footer>
+   496→  </div>
+   497→
+   498→  <script src="/static/js/socket.io.min.js"></script>
+   499→  <script src="/static/js/app.js?v=072"></script>
+   500→</body>
+   501→</html>
+   502→

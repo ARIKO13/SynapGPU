@@ -17,6 +17,7 @@ const state = {
   ssdReadHistory: [],
   cpuUtilHistory: [],
   connected: false,
+  connectionFailed: false,
   consoleLines: [],
   chatMessages: [],
   chatStreaming: false,
@@ -52,14 +53,26 @@ function log(t, l='info') { state.consoleLines.push({id:uid(),ts:Date.now(),leve
 // WebSocket
 function connectSocket() {
   const s = io({transports:['websocket','polling'],reconnection:true,reconnectionAttempts:10,reconnectionDelay:1200,timeout:10000});
-  s.on('connect', () => { state.connected=true; log('Connected to backend.','success'); renderConnection(); });
+  s.on('connect', () => {
+    state.connected=true; state.connectionFailed=false;
+    log('Connected to backend.','success'); renderConnection(); hideDashboardLoading();
+  });
   s.on('disconnect', () => { state.connected=false; log('Backend disconnected.','warn'); renderConnection(); });
+  s.on('connect_error', () => {
+    if(!state.connectionFailed){
+      state.connectionFailed=true;
+      log('Cannot reach SynapGPU backend. Make sure it is running on port 3000.','error');
+      showDashboardOffline();
+      renderConnection();
+    }
+  });
   s.on('metrics', (m) => {
     state.metrics = m; state.metricsHistory.push(m);
     if(state.metricsHistory.length>MAX_HISTORY) state.metricsHistory.shift();
     if(m.gpu&&m.gpu.available&&m.gpu.utilization!==undefined){state.gpuUtilHistory.push(m.gpu.utilization);if(state.gpuUtilHistory.length>MAX_HISTORY)state.gpuUtilHistory.shift();}
     state.ssdReadHistory.push(m.ssd.readMbps);
     if(state.ssdReadHistory.length>MAX_HISTORY) state.ssdReadHistory.shift();
+    hideDashboardLoading();
     renderMetrics();
   });
   s.on('session:state', (ss) => {
@@ -70,6 +83,30 @@ function connectSocket() {
     else if(ss.runState==='idle') log('Idle.','info');
     renderRunState();
   });
+  // Fallback: if still no connection after 8s, drop the "Connecting…" state
+  // and show an offline message so the rest of the UI stays usable.
+  setTimeout(()=>{
+    if(!state.connected && !state.metrics){ showDashboardOffline(); }
+  }, 8000);
+}
+
+function hideDashboardLoading(){
+  const dl=$('#dashboard-loading'), dc=$('#dashboard-content');
+  if(dl) dl.classList.add('hidden');
+  if(dc) dc.classList.remove('hidden');
+}
+
+function showDashboardOffline(){
+  const dl=$('#dashboard-loading'), dc=$('#dashboard-content');
+  if(dc) dc.classList.add('hidden');
+  if(dl){
+    dl.classList.remove('hidden');
+    dl.innerHTML = '<div class="spinner stopped"></div>'
+      + '<p style="color:#f87171;margin-top:8px;">Backend offline</p>'
+      + '<p style="color:#a1a1aa;font-size:11px;margin-top:4px;max-width:280px;text-align:center;">'
+      + 'Start SynapGPU Desktop on port 3000 to enable live metrics, model loading, and chat.'
+      + '</p>';
+  }
 }
 
 // API calls
@@ -89,11 +126,22 @@ async function uploadFiles(fl) {
     const d=await r.json(); state.files=d.files;
     const tb=d.created.reduce((a,f)=>a+f.sizeBytes,0);
     log(`Uploaded ${d.created.length} file${d.created.length>1?'s':''} (${humanSize(tb)}).`,'success');
-    renderFiles(); renderRunState(); renderCustomFileList();
+    renderFiles(); renderRunState(); populateModelSelects();
+    // Auto-fill: if a new .gguf model was uploaded, pre-select it in the Test tab dropdown
+    // so the user can click Load immediately without re-selecting.
+    const newLlm=d.created.find(f=>f.category==='llm');
+    if(newLlm){
+      const sel=$('#pretrained-model-select');
+      if(sel){ sel.value=newLlm.id; $('#load-pretrained-btn').disabled=false; }
+      // Also auto-fill Train tab's base model select, since the user almost certainly
+      // dropped the .gguf with the intent to train or test it.
+      const tms=$('#train-model-select'); if(tms && !tms.value) tms.value=newLlm.id;
+      updateTrainButton();
+    }
   } catch(e) { log(`Upload failed: ${e.message}`,'error'); }
 }
-async function deleteFile(id) { try { const r=await fetch(`/api/files?id=${id}`,{method:'DELETE'}); if(r.ok){state.files=state.files.filter(f=>f.id!==id); log('File deleted.','info'); renderFiles(); renderRunState(); renderCustomFileList();} } catch(e){} }
-async function clearAllFiles() { for(const f of state.files){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=[]; log('All files cleared.','info'); renderFiles(); renderRunState(); renderCustomFileList(); }
+async function deleteFile(id) { try { const r=await fetch(`/api/files?id=${id}`,{method:'DELETE'}); if(r.ok){state.files=state.files.filter(f=>f.id!==id); log('File deleted.','info'); renderFiles(); renderRunState(); populateModelSelects();} } catch(e){} }
+async function clearAllFiles() { for(const f of state.files){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=[]; log('All files cleared.','info'); renderFiles(); renderRunState(); populateModelSelects(); }
 
 // Run control
 async function handleRun() {
@@ -335,7 +383,7 @@ const comps=Object.entries(filtered).map(([k,v])=>{const o=llmOS(v);return{key:k
 // Rendering — same as web version
 function statusAccent(p){return p>=90?'rose':p>=70?'amber':'emerald';}
 function applyAccentClass(c,p){c.setAttribute('data-accent',statusAccent(p));}
-function renderConnection(){const cs=$('#conn-status'),ft=$('#footer-conn');if(state.connected){cs.classList.add('online');$('#conn-text').textContent='live';ft.classList.add('online');ft.innerHTML='<span class="indicator-dot"></span> live';}else{cs.classList.remove('online');$('#conn-text').textContent='offline';ft.classList.remove('online');ft.innerHTML='<span class="indicator-dot"></span> offline';}if(state.connected||state.metrics){$('#dashboard-loading').classList.add('hidden');$('#dashboard-content').classList.remove('hidden');}else{$('#dashboard-loading').classList.remove('hidden');$('#dashboard-content').classList.add('hidden');}}
+function renderConnection(){const cs=$('#conn-status'),ft=$('#footer-conn');if(state.connected){cs.classList.add('online');$('#conn-text').textContent='live';ft.classList.add('online');ft.innerHTML='<span class="indicator-dot"></span> live';}else{cs.classList.remove('online');$('#conn-text').textContent='offline';ft.classList.remove('online');ft.innerHTML='<span class="indicator-dot"></span> offline';}if(state.connected||state.metrics){hideDashboardLoading();}else if(state.connectionFailed){/* keep showDashboardOffline as-is */}else{const dl=$('#dashboard-loading'),dc=$('#dashboard-content');if(dl)dl.classList.remove('hidden');if(dc)dc.classList.add('hidden');}}
 function renderDeviceInfo(){const i=state.deviceInfo;if(!i)return;$('#di-hostname').textContent=`${i.platform||''} ${i.machine||''}`.trim()||i.cpu.model;$('#di-cpu').textContent=i.cpu.model;$('#di-cpu').title=i.cpu.model;$('#di-cores').textContent=`${i.cpu.coresPhysical}P / ${i.cpu.coresLogical}L`;$('#cpu-cores-footer').textContent=`${i.cpu.coresLogical} logical cores`;$('#di-ram').textContent=`${i.ram.totalGb} GB`;$('#ram-total').textContent=i.ram.totalGb;$('#di-disk').textContent=`${i.disk.totalGb} GB`;$('#ssd-total').textContent=i.disk.totalGb;const ga=$('#gpu-unavailable'),gm=$('#gpu-metrics-grid'),gc=$('#gpu-chart-card');if(i.gpu.available){$('#di-gpu').textContent=i.gpu.name;$('#di-gpu').classList.add('accent');$('#di-vram').textContent=`${i.gpu.vramTotalGb} GB`;$('#di-vram').classList.add('accent');$('#gpu-vram-total').textContent=i.gpu.vramTotalGb.toFixed(0);ga?.classList.add('hidden');gm?.classList.remove('hidden');gc?.classList.remove('hidden');}else{$('#di-gpu').textContent='Not detected';$('#di-gpu').classList.add('muted');$('#di-vram').textContent='—';$('#di-vram').classList.add('muted');ga?.classList.remove('hidden');gm?.classList.add('hidden');gc?.classList.add('hidden');}renderMultiGPU();renderMultiDisk();}
 
 function renderMultiGPU(){const i=state.deviceInfo;if(!i||!i.gpus)return;const section=$('#multi-gpu-section');if(!section)return;const gpus=i.gpus.filter(g=>g.available);if(gpus.length<=1){section.classList.add('hidden');return;}section.classList.remove('hidden');$('#gpu-count-badge').textContent=gpus.length;const list=$('#multi-gpu-list');let h='';gpus.forEach(g=>{const tag=g.type==='integrated'?'integrated':'dedicated';h+=`<div class="mds-row"><span class="mds-row-label">${escapeHtml(g.name)}</span><span class="mds-row-tag ${tag}">${g.type||'dedicated'}</span><span class="mds-row-value">${g.vramTotalGb} GB VRAM</span><span class="mds-row-value">${g.backend||'?'}</span></div>`;});list.innerHTML=h;}
