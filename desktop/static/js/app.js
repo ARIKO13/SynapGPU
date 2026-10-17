@@ -147,50 +147,145 @@ function stopChat() { if(state.chatAbortController) state.chatAbortController.ab
 function clearChat() { state.chatMessages=[]; renderChatMessages(); }
 
 // WebGPU model loader (same as web version)
-let webllmEngine=null,webllmLib=null,activeModelId=null,wllamaInstance=null,llmMode='preset';
-async function loadWebLLM() {
-  const lb=$('#load-model-btn'),sel=$('#model-select'),pe=$('#load-progress'),lp=$('#lp-text'),lpp=$('#lp-percent'),lbar=$('#lp-bar');
-  const mid=sel.value; if(!mid) return;
-  if(!('gpu'in navigator)){$('#chat-error').textContent='WebGPU not supported. Use Chrome 113+.';$('#chat-error').classList.remove('hidden');return;}
-  lb.classList.add('loading');lb.disabled=true;sel.disabled=true;pe.classList.remove('hidden');lp.textContent='Initializing…';lpp.textContent='0%';lbar.style.width='0%';
-  try{
-    if(!webllmLib){lp.textContent='Loading web-llm…';webllmLib=await import('https://esm.run/@mlc-ai/web-llm');}
-    if(webllmEngine&&activeModelId!==mid){try{webllmEngine.unload();}catch(e){}webllmEngine=null;}
-    if(webllmEngine&&activeModelId===mid){lp.textContent='Ready';lpp.textContent='100%';lbar.style.width='100%';onModelReady(mid);return;}
-    lp.textContent='Loading '+mid+'…';log('Loading '+mid+' via WebGPU…','info');
-    webllmEngine=await webllmLib.CreateMLCEngine(mid,{initProgressCallback:(p)=>{const pct=Math.round((p.progress||0)*100);lpp.textContent=pct+'%';lbar.style.width=pct+'%';if(p.text){lp.textContent=p.text.length>77?p.text.slice(0,77)+'…':p.text;}}});
-    activeModelId=mid;log('Model loaded: '+mid,'success');onModelReady(mid);
-  }catch(e){log('Load failed: '+e.message,'error');$('#chat-error').textContent='Load failed: '+e.message;$('#chat-error').classList.remove('hidden');pe.classList.add('hidden');}
-  finally{lb.classList.remove('loading');lb.disabled=false;sel.disabled=false;}
+let activeModelId=null,llmMode='pretrained';
+let trainedModel=null; // {name, size, params, base, dataset, epochs, fileId, path}
+
+// --- Test tab: populate model dropdowns ---
+function populateModelSelects(){
+  const sel=$('#pretrained-model-select');if(!sel)return;
+  const llmFiles=state.files.filter(f=>f.category==='llm');
+  let opts='<option value="">Select .gguf from Models ↑</option>';
+  llmFiles.forEach(f=>{opts+=`<option value="${f.id}">${escapeHtml(f.name)} (${f.humanSize})</option>`;});
+  sel.innerHTML=opts;
+  const btn=$('#load-pretrained-btn');if(btn)btn.disabled=!llmFiles.length;
+  // Update train tab selects too
+  const tms=$('#train-model-select');if(tms){tms.innerHTML='<option value="">Select from Models ↑</option>'+llmFiles.map(f=>`<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');}
+  const tds=$('#train-dataset-select');if(tds){const ds=state.files.filter(f=>['dataset','notebook'].includes(f.category));tds.innerHTML='<option value="">Select from Datasets ↑</option>'+ds.map(f=>`<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');}
+  // Enable Start Training button if both selected
+  updateTrainButton();
 }
-function onModelReady(mid){const pe=$('#load-progress');$('#lp-text').textContent='Ready: '+mid;$('#lp-percent').textContent='100%';$('#lp-bar').style.width='100%';setTimeout(()=>{pe.classList.add('hidden');},2000);const inp=$('#chat-input');inp.disabled=false;inp.placeholder='Type a message… (Cmd/Ctrl+Enter to send)';inp.focus();const b=$('#chat-model-badge');b.textContent=mid.split('-').slice(0,3).join('-');b.classList.remove('hidden');const ce=$('#ce-sub');if(ce)ce.textContent='Model loaded. Type a message above.';state.runState='running';state.activeModel=mid;renderRunState();}
 
-// LLM mode tabs
-function setLlmMode(mode){llmMode=mode;$$('.llm-tab').forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));$('#llm-preset').classList.toggle('hidden',mode!=='preset');$('#llm-custom').classList.toggle('hidden',mode!=='custom');}
+function updateTrainButton(){
+  const ms=$('#train-model-select'),ds=$('#train-dataset-select'),btn=$('#start-train-btn');
+  if(!btn)return;
+  btn.disabled=!(ms&&ms.value&&ds&&ds.value);
+}
 
-// Custom file list (from backend /api/files)
-function renderCustomFileList(){const c=$('#custom-file-list');if(!c)return;const llmFiles=state.files.filter(f=>f.category==='llm');if(!llmFiles.length){c.innerHTML='<div class="custom-file-empty">No .gguf files. Drop one in the sidebar.</div>';return;}let h='';llmFiles.forEach(f=>{const t=new Date(f.uploadedAt).toLocaleTimeString('en-US',{hour12:false});let tag='',cls='';if(f.sizeBytes<=500000000){tag='Fast';cls='ok';}else if(f.sizeBytes<=1000000000){tag='Slow';cls='warn';}else if(f.sizeBytes<=2000000000){tag='May crash';cls='warn';}else{tag='Desktop OK';cls='ok';}h+=`<div class="custom-file-row"data-id="${f.id}"><span class="custom-file-icon"><svg viewBox="0 0 24 24"fill="none"stroke="currentColor"stroke-width="2"><rect x="4"y="4"width="16"height="16"rx="2"/><rect x="9"y="9"width="6"height="6"/></svg></span><div class="custom-file-info"><div class="custom-file-name">${escapeHtml(f.name)}</div><div class="custom-file-meta">${f.humanSize} · ${t}</div></div><span class="csi-tag ${cls}">${tag}</span><span class="custom-file-load">Load →</span></div>`;});c.innerHTML=h;c.querySelectorAll('.custom-file-row').forEach(r=>{r.addEventListener('click',()=>{const fid=r.dataset.id;const f=state.files.find(f=>f.id===fid);if(f)loadCustomFromBackend(f);});});}
+// --- Load pre-trained model for testing ---
+async function handleLoadPretrained(){
+  const sel=$('#pretrained-model-select');if(!sel||!sel.value)return;
+  const file=state.files.find(f=>f.id===sel.value);if(!file)return;
+  state.runState='loading';state.activeModel=file.name;renderRunState();
+  try{
+    // Tell backend to load this model for chat
+    const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start',model:file.name})});
+    if(!r.ok)throw new Error('Backend failed to load model');
+    state.runState='running';activeModelId=file.name;
+    log('Model loaded: '+file.name,'success');
+    onModelReady(file.name);
+  }catch(e){log('Load failed: '+e.message,'error');state.runState='error';renderRunState();}
+}
 
-async function loadCustomFromBackend(fileInfo) {
-  // Desktop version: fetch the .gguf from backend and load via wllama
-  const pe=$('#load-progress'),lp=$('#lp-text'),lpp=$('#lp-percent'),lbar=$('#lp-bar');
-  pe.classList.remove('hidden');lp.textContent='Loading from backend…';lpp.textContent='0%';lbar.style.width='0%';
-  try {
-    // Fetch the file from backend
-    const r=await fetch(`/api/files/${fileInfo.id}/download`);
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const blob=await r.blob();
-    lp.textContent='Loading '+fileInfo.name+' ('+humanSize(blob.size)+')…';
-    log('Loading from backend: '+fileInfo.name,'info');
-    // Load via wllama
-    const WLLAMA_CDN='https://cdn.jsdelivr.net/npm/@wllama/wllama@3.6.1/esm';
-    const mod=await import(WLLAMA_CDN+'/index.js');
-    const Wllama=mod.Wllama;
-    wllamaInstance=new Wllama({'default':WLLAMA_CDN+'/wasm/wllama.wasm'},{progressCallback:({loaded,total})=>{if(total>0){const pct=Math.round((loaded/total)*100);lpp.textContent=pct+'%';lbar.style.width=pct+'%';}}});
-    const ab=await blob.arrayBuffer(); const cleanBlob=new Blob([ab],{type:'application/octet-stream'});
-    await wllamaInstance.loadModel([cleanBlob],{n_ctx:blob.size>1000000000?512:2048,n_threads:navigator.hardwareConcurrency||4,n_gpu_layers:0,n_batch:128});
-    activeModelId=fileInfo.name;log('Model loaded: '+fileInfo.name,'success');onModelReady(fileInfo.name);
-  } catch(e) { log('Load failed: '+e.message,'error');$('#chat-error').textContent='Load failed: '+e.message;$('#chat-error').classList.remove('hidden');pe.classList.add('hidden'); }
+// --- Load trained model for testing ---
+async function handleLoadTrained(){
+  if(!trainedModel)return;
+  state.runState='loading';state.activeModel=trainedModel.name;renderRunState();
+  try{
+    const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start',model:trainedModel.name})});
+    if(!r.ok)throw new Error('Backend failed to load trained model');
+    state.runState='running';activeModelId=trainedModel.name;
+    state.userModelParamsB=trainedModel.params||0;
+    log('Trained model loaded: '+trainedModel.name+' ('+trainedModel.params+'B params)','success');
+    onModelReady(trainedModel.name);
+  }catch(e){log('Load failed: '+e.message,'error');state.runState='error';renderRunState();}
+}
+
+// --- Start training ---
+async function handleStartTrain(){
+  const ms=$('#train-model-select'),ds=$('#train-dataset-select');if(!ms||!ms.value||!ds||!ds.value)return;
+  const params={
+    modelId:ms.value,
+    datasetId:ds.value,
+    epochs:parseInt($('#train-epochs')?.value||'3'),
+    lr:$('#train-lr')?.value||'1e-4',
+    batch:parseInt($('#train-batch')?.value||'4'),
+    ctx:parseInt($('#train-ctx')?.value||'2048'),
+    method:$('#train-method')?.value||'lora',
+    output:$('#train-output')?.value||'trained-model',
+  };
+  log('Starting training: '+params.method+' on '+params.modelId+' with '+params.datasetId,'info');
+  $('#start-train-btn')?.classList.add('hidden');
+  $('#stop-train-btn')?.classList.remove('hidden');
+  const tp=$('#train-progress');if(tp)tp.classList.remove('hidden');
+  $('#tp-status').textContent='Running';
+  $('#tp-epoch').textContent='0/'+params.epochs;
+  $('#tp-loss').textContent='—';
+  $('#tp-params').textContent='—';
+  $('#tp-iter').textContent='0';
+  $('#tp-speed').textContent='—';
+  $('#tp-eta').textContent='—';
+  $('#tp-bar').style.width='0%';
+  $('#tp-log').innerHTML='';
+
+  try{
+    const r=await fetch('/api/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)});
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||'Training failed');
+    // Training completed (backend does it synchronously for now)
+    trainedModel={
+      name:data.name||params.output+'.gguf',
+      size:data.size||0,
+      params:data.params_b||0,
+      base:state.files.find(f=>f.id===params.modelId)?.name||'?',
+      dataset:state.files.find(f=>f.id===params.datasetId)?.name||'?',
+      epochs:params.epochs,
+      fileId:data.fileId||'',
+      path:data.path||'',
+    };
+    $('#tp-status').textContent='Done';
+    $('#tp-bar').style.width='100%';
+    $('#tp-epoch').textContent=params.epochs+'/'+params.epochs;
+    $('#tp-params').textContent=trainedModel.params+'B';
+    $('#tp-log').innerHTML+='<br>Training complete. Model: '+trainedModel.name+' ('+trainedModel.params+'B params)';
+    log('Training complete: '+trainedModel.name+' ('+trainedModel.params+'B params)','success');
+    // Show trained model in Test tab
+    showTrainedModel();
+    // Add to file list
+    if(data.fileId){await refreshFiles();populateModelSelects();}
+  }catch(e){
+    $('#tp-status').textContent='Error';
+    $('#tp-log').innerHTML+='<br>Error: '+e.message;
+    log('Training error: '+e.message,'error');
+  }finally{
+    $('#start-train-btn')?.classList.remove('hidden');
+    $('#stop-train-btn')?.classList.add('hidden');
+  }
+}
+
+function showTrainedModel(){
+  if(!trainedModel)return;
+  $('#trained-model-area')?.classList.add('hidden');
+  const ti=$('#trained-model-info');if(!ti)return;
+  ti.classList.remove('hidden');
+  $('#ti-name').textContent=trainedModel.name;
+  $('#ti-size').textContent=trainedModel.size>0?humanSize(trainedModel.size):'—';
+  $('#ti-params').textContent=trainedModel.params>0?trainedModel.params+'B':'—';
+  $('#ti-base').textContent=trainedModel.base;
+  $('#ti-dataset').textContent=trainedModel.dataset;
+  $('#ti-epochs').textContent=trainedModel.epochs;
+  if(trainedModel.fileId){
+    const dl=$('#download-trained-btn');if(dl)dl.href='/api/files/'+trainedModel.fileId+'/download';
+  }
+}
+
+// --- Tab switching for Test (pretrained vs trained) ---
+function setLlmMode(mode){llmMode=mode;$$('.llm-tab').forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));$('#llm-pretrained')?.classList.toggle('hidden',mode!=='pretrained');$('#llm-trained')?.classList.toggle('hidden',mode!=='trained');}
+
+function onModelReady(mid){
+  const pe=$('#load-progress');if(pe){$('#lp-text').textContent='Ready';$('#lp-percent').textContent='100%';$('#lp-bar').style.width='100%';setTimeout(()=>{pe.classList.add('hidden');},1500);}
+  const inp=$('#chat-input');if(inp){inp.disabled=false;inp.placeholder='Type a message… (Cmd/Ctrl+Enter)';inp.focus();}
+  const b=$('#chat-model-badge');if(b){b.textContent=mid;b.classList.remove('hidden');}
+  state.runState='running';state.activeModel=mid;renderRunState();
 }
 
 // Benchmark analyzer
@@ -334,19 +429,26 @@ async function init(){
   $$('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
   $('#run-btn').addEventListener('click',handleRun);
   $('#stop-btn').addEventListener('click',handleStop);
-  $('#clear-models-btn')?.addEventListener('click',async()=>{for(const f of state.files.filter(f=>['llm','config','other'].includes(f.category))){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=state.files.filter(f=>!['llm','config','other'].includes(f.category));log('Models cleared.','info');renderFiles();renderRunState();});
-  $('#clear-datasets-btn')?.addEventListener('click',async()=>{for(const f of state.files.filter(f=>['dataset','notebook'].includes(f.category))){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=state.files.filter(f=>!['dataset','notebook'].includes(f.category));log('Datasets cleared.','info');renderFiles();renderRunState();});
+  $('#clear-models-btn')?.addEventListener('click',async()=>{for(const f of state.files.filter(f=>['llm','config','other'].includes(f.category))){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=state.files.filter(f=>!['llm','config','other'].includes(f.category));log('Models cleared.','info');renderFiles();populateModelSelects();renderRunState();});
+  $('#clear-datasets-btn')?.addEventListener('click',async()=>{for(const f of state.files.filter(f=>['dataset','notebook'].includes(f.category))){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=state.files.filter(f=>!['dataset','notebook'].includes(f.category));log('Datasets cleared.','info');renderFiles();populateModelSelects();renderRunState();});
   $('#clear-console-btn').addEventListener('click',()=>{state.consoleLines=[];renderConsole();});
   $('#chat-input').addEventListener('input',renderChatInput);
   $('#chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();sendMessage();}});
   $('#chat-send-btn').addEventListener('click',sendMessage);
   $('#chat-stop-btn').addEventListener('click',stopChat);
   $('#clear-chat-btn').addEventListener('click',clearChat);
-  $('#load-model-btn').addEventListener('click',loadWebLLM);
-  $$('.llm-tab').forEach(t=>t.addEventListener('click',()=>setLlmMode(t.dataset.mode)));
   $('#radar-compare-select').addEventListener('change',e=>{state.radarCompareKey=e.target.value;renderRadarChart();});
   $('#clear-benchmark-btn').addEventListener('click',()=>{state.benchmarkResults=[];renderBenchmark();log('Benchmark cleared.','info');});
+  // Test tab: pretrained vs trained
+  $$('.llm-tab').forEach(t=>t.addEventListener('click',()=>setLlmMode(t.dataset.mode)));
+  $('#load-pretrained-btn')?.addEventListener('click',handleLoadPretrained);
+  $('#load-trained-btn')?.addEventListener('click',handleLoadTrained);
+  $('#pretrained-model-select')?.addEventListener('change',()=>{$('#load-pretrained-btn').disabled=!$('#pretrained-model-select').value;});
+  // Train tab
+  $('#train-model-select')?.addEventListener('change',updateTrainButton);
+  $('#train-dataset-select')?.addEventListener('change',updateTrainButton);
+  $('#start-train-btn')?.addEventListener('click',handleStartTrain);
   await fetchDeviceInfo(); await fetchBenchmarks(); await fetchLocalLlms(); await refreshFiles();
-  renderConnection(); renderDeviceInfo(); renderFiles(); renderRunState(); renderConsole(); renderChatMessages(); renderChatInput(); renderBenchmark(); renderCustomFileList();
+  renderConnection(); renderDeviceInfo(); renderFiles(); renderRunState(); renderConsole(); renderChatMessages(); renderChatInput(); renderBenchmark(); populateModelSelects();
 }
 document.addEventListener('DOMContentLoaded',init);

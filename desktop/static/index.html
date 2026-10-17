@@ -357,17 +357,45 @@
             <button id="clear-chat-btn" class="btn-ghost">Clear</button>
           </div>
 
-          <!-- Model selector — from user's files only -->
+          <!-- Two model sources: Pre-trained vs Trained -->
           <div class="llm-loader">
-            <div class="llm-loader-row">
-              <span class="llm-label">Model</span>
-              <select id="test-model-select" class="llm-select">
-                <option value="">Select a trained model…</option>
-              </select>
-              <button id="load-model-btn" class="btn btn-primary">
-                <span>Load</span>
-              </button>
+            <div class="llm-tabs">
+              <button class="llm-tab active" data-mode="pretrained">Pre-trained Model</button>
+              <button class="llm-tab" data-mode="trained">Trained Model</button>
             </div>
+
+            <!-- Pre-trained: from Models sidebar -->
+            <div id="llm-pretrained" class="llm-mode">
+              <div class="llm-loader-row">
+                <span class="llm-label">Model</span>
+                <select id="pretrained-model-select" class="llm-select">
+                  <option value="">Select .gguf from Models ↑</option>
+                </select>
+                <button id="load-pretrained-btn" class="btn btn-primary" disabled>
+                  <span>Load</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Trained: output from Train tab -->
+            <div id="llm-trained" class="llm-mode hidden">
+              <div id="trained-model-area">
+                <div class="trained-empty">No trained model yet. Go to Train tab → select model + dataset → Start Training.</div>
+              </div>
+              <div id="trained-model-info" class="trained-info hidden">
+                <div class="ti-row"><span class="ti-label">Name</span><span id="ti-name" class="ti-value">—</span></div>
+                <div class="ti-row"><span class="ti-label">Size</span><span id="ti-size" class="ti-value">—</span></div>
+                <div class="ti-row"><span class="ti-label">Params</span><span id="ti-params" class="ti-value">—</span></div>
+                <div class="ti-row"><span class="ti-label">Base</span><span id="ti-base" class="ti-value">—</span></div>
+                <div class="ti-row"><span class="ti-label">Dataset</span><span id="ti-dataset" class="ti-value">—</span></div>
+                <div class="ti-row"><span class="ti-label">Epochs</span><span id="ti-epochs" class="ti-value">—</span></div>
+                <div class="ti-actions">
+                  <button id="load-trained-btn" class="btn btn-primary"><span>Load & Test</span></button>
+                  <a id="download-trained-btn" class="btn btn-download" download><span>Download .gguf</span></a>
+                </div>
+              </div>
+            </div>
+
             <div id="load-progress" class="load-progress hidden">
               <div class="lp-header">
                 <span id="lp-text" class="lp-text">Loading…</span>
@@ -468,6 +496,6 @@
   </div>
 
   <script src="/static/js/socket.io.min.js"></script>
-  <script src="/static/js/app.js?v=071"></script>
+  <script src="/static/js/app.js?v=072"></script>
 </body>
 </html>
