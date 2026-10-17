@@ -81,3 +81,29 @@ Work Log:
 Stage Summary:
 - File touched: `src/components/platform/chat-tester.tsx` only.
 - Behavior after fix: After completing a training job in the Test tab → Trained mode, clicking "Download" now triggers a real browser download of `<name>.manifest.json` containing the training-job metadata. The manifest is self-documenting — it explicitly notes that real .gguf weights require SynapGPU Desktop.
+
+---
+Task ID: fix-4
+Agent: main
+Task: User wants a convenient download link for SynapGUI Desktop from GitHub.
+
+Work Log:
+- Verified GitHub repo ARIKO13/SynapGPU has 16 releases; latest is v0.8.0 shipping `SynapGPU-Windows.zip` (~14 MB, bundled Python, no install needed). No macOS/Linux prebuilt binaries yet — those users build from source via build.sh.
+- Edited `src/components/platform/platform-header.tsx`:
+  - Added `Download` and `Apple` (macOS) icons to imports.
+  - Added client-side OS detection via `navigator.userAgent` (Windows / mac / linux / unknown).
+  - Constructed `downloadHref`:
+    - Windows: deep-link directly to the asset → `https://github.com/ARIKO13/SynapGPU/releases/latest/download/SynapGPU-Windows.zip` (one-click download, no GitHub UI navigation).
+    - macOS / Linux / unknown: land on the releases page → `https://github.com/ARIKO13/SynapGPU/releases/latest` (so they can pick source code or follow build instructions).
+  - Added a new `<a>` button in the header between the active-model badge and the connection pill. It's an emerald-tinted outline button with:
+    - OS-appropriate icon (`Apple` for mac, `Download` for everything else).
+    - Label "Download Desktop".
+    - A small "Win" badge on Windows so the user knows the binary is prebuilt for their platform.
+    - `title` attribute with platform-specific tooltip (file size, install notes).
+    - `target="_blank"` + `rel="noopener noreferrer"` for safe external navigation.
+    - `onClick` logs to the platform console so the user sees the action in the Console tab.
+- Hidden on small screens (`sm:flex` + `hidden`) to preserve header space on mobile — but visible on tablet/desktop where the user is most likely to be running SynapGPU Desktop alongside.
+
+Stage Summary:
+- File touched: `src/components/platform/platform-header.tsx` only.
+- Behavior after fix: header now shows a prominent emerald "Download Desktop" button. On Windows it deep-links straight to the .zip download (browser saves the file directly). On macOS/Linux it opens the GitHub releases page in a new tab. Click also leaves a log entry in the Console tab.

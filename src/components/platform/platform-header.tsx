@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Play, Square, Loader2, Cpu, Github, Wifi, WifiOff } from 'lucide-react'
+import { Play, Square, Loader2, Cpu, Github, Wifi, WifiOff, Download, Monitor, Apple } from 'lucide-react'
 import { usePlatformStore } from '@/store/platform-store'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -34,6 +34,32 @@ export function PlatformHeader() {
 
   const llmFiles = files.filter((f) => f.category === 'llm')
   const canRun = llmFiles.length > 0 && (runState === 'idle' || runState === 'stopped' || runState === 'error')
+
+  // Detect user's OS client-side so the Download button can deep-link to the
+  // right asset on the GitHub releases page (Windows zip today; macOS/Linux
+  // fall back to "build from source" instructions).
+  const [os, setOs] = useState<'windows' | 'mac' | 'linux' | 'unknown'>('unknown')
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return
+    const ua = navigator.userAgent.toLowerCase()
+    if (ua.includes('win')) setOs('windows')
+    else if (ua.includes('mac')) setOs('mac')
+    else if (ua.includes('linux')) setOs('linux')
+    else setOs('unknown')
+  }, [])
+
+  // GitHub releases — repo: ARIKO13/SynapGPU. Latest tag is v0.8.0 and ships
+  // `SynapGPU-Windows.zip`. We deep-link to the asset for the detected OS so
+  // the user doesn't have to navigate the GitHub releases page themselves.
+  const repoReleases = 'https://github.com/ARIKO13/SynapGPU/releases/latest'
+  const downloadHref =
+    os === 'windows'
+      ? 'https://github.com/ARIKO13/SynapGPU/releases/latest/download/SynapGPU-Windows.zip'
+      : repoReleases // macOS/Linux: no prebuilt binary yet → land on releases page
+
+  function onDownloadClick() {
+    log(`Membuka halaman download SynapGPU Desktop (${os || 'unknown OS'})…`, 'info')
+  }
 
   async function handleRun() {
     const model = llmFiles[0]?.name ?? null
@@ -99,6 +125,38 @@ export function PlatformHeader() {
             )}
           </div>
         )}
+
+        {/* Download SynapGPU Desktop — deep-links to the GitHub release asset
+            for the user's detected OS. Hidden on small screens to save space;
+            it's also reachable from the chat-tester's "Trained Model" panel
+            via the manifest.json download note. */}
+        <a
+          href={downloadHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onDownloadClick}
+          className={cn(
+            'hidden items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition sm:flex',
+            'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20',
+          )}
+          title={
+            os === 'windows'
+              ? 'Download SynapGPU-Windows.zip (~14 MB, no install needed)'
+              : os === 'mac'
+                ? 'Download SynapGPU Desktop (macOS — build from source)'
+                : os === 'linux'
+                  ? 'Download SynapGPU Desktop (Linux — build from source)'
+                  : 'Download SynapGPU Desktop from GitHub'
+          }
+        >
+          {os === 'mac' ? <Apple className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+          <span>Download Desktop</span>
+          {os === 'windows' && (
+            <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider">
+              Win
+            </span>
+          )}
+        </a>
 
         {/* Connection */}
         <div className={cn(
