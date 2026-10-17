@@ -18,6 +18,8 @@ interface TrainedModel {
   base: string
   dataset: string
   epochs: number
+  method: 'lora' | 'full'
+  trainedAt: number
 }
 
 function humanSize(bytes: number): string {
@@ -27,6 +29,51 @@ function humanSize(bytes: number): string {
   let i = 0
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
   return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`
+}
+
+function downloadTrainedModel(model: TrainedModel) {
+  // In the web preview we don't have real GPU compute, so the trained model
+  // doesn't exist as a real .gguf binary on disk. What we *can* honestly
+  // hand the user is a manifest file describing the training job — name,
+  // params, base, dataset, epochs, method, timestamp — packaged as a
+  // .gguf.json file they can keep as a record of what they trained.
+  //
+  // For a real binary artifact (.gguf with weights), the user should run
+  // SynapGPU Desktop, which calls llama.cpp fine-tune and writes a real
+  // .gguf to disk. That note is included in the manifest so the file is
+  // self-documenting.
+  const manifest = {
+    format: 'synapgpu-trained-model-manifest',
+    version: 1,
+    name: model.name,
+    trainedAt: new Date(model.trainedAt).toISOString(),
+    model: {
+      name: model.name,
+      paramsBillions: model.paramsB,
+      reportedSizeBytes: model.sizeBytes,
+      method: model.method,
+    },
+    training: {
+      baseModel: model.base,
+      dataset: model.dataset,
+      epochs: model.epochs,
+    },
+    note:
+      'This manifest describes a training job executed in the SynapGPU web preview. ' +
+      'The actual .gguf weights are not produced here because the preview has no GPU compute. ' +
+      'Run SynapGPU Desktop (https://github.com/ARIKO13/SynapGPU/releases/latest) to produce a real .gguf binary.',
+  }
+  const blob = new Blob([JSON.stringify(manifest, null, 2)], {
+    type: 'application/json',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${model.name.replace(/\.gguf$/i, '')}.manifest.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 export function ChatTester() {
@@ -138,6 +185,8 @@ export function ChatTester() {
         base: baseFile.name,
         dataset: dsFile.name,
         epochs: trainParams.epochs,
+        method: trainParams.method,
+        trainedAt: Date.now(),
       }
       setTrainedModel(trained)
       log(`Training selesai: ${trained.name} (${trained.paramsB}B params)`, 'success')
@@ -452,7 +501,12 @@ export function ChatTester() {
                     variant="outline"
                     size="sm"
                     className="gap-1 border-zinc-700 bg-zinc-900/60"
-                    onClick={() => log('Download model: not wired up in web preview. Run Flask desktop for real download.', 'warn')}
+                    onClick={() => {
+                      if (trainedModel) {
+                        downloadTrainedModel(trainedModel)
+                        log(`Mengunduh manifest: ${trainedModel.name}`, 'success')
+                      }
+                    }}
                   >
                     <Download className="h-3 w-3" /> Download
                   </Button>

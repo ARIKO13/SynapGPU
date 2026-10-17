@@ -59,3 +59,25 @@ Stage Summary:
   - Dropping a .gguf file in the left sidebar now: (a) lists it under "LLM Models" in the sidebar (as before), (b) auto-selects it in the Test tab's "Pre-trained Model" dropdown (so the Load button is immediately clickable), and (c) the user can click Load to load it for chat.
   - Test tab now has two modes: "Pre-trained Model" (load existing .gguf) and "Trained Model" (configure training + run it + load the output). Mirrors the UI that was previously only in Flask desktop.
 - The Flask desktop fixes from Task fix-1 are still in place; they apply to users who download and run SynapGPU Desktop locally.
+
+---
+Task ID: fix-3
+Agent: main
+Task: Make the "Download" button on the trained-model panel actually work — previously it just logged a "not wired up in web preview" warning.
+
+Work Log:
+- Diagnosed: the trained-model Download button in chat-tester.tsx was a placeholder that only logged a warning to the console. No actual file was produced.
+- Constraint: in the web preview we don't have GPU compute, so a real .gguf binary with trained weights cannot be produced. The honest thing to download is a manifest file describing the training job.
+- Implemented client-side download via Blob + URL.createObjectURL (no server roundtrip needed — all the metadata is already in the browser after training completes).
+- Added `downloadTrainedModel(model: TrainedModel)` helper in chat-tester.tsx that:
+  - Builds a JSON manifest with: format identifier, version, name, trainedAt (ISO), model { name, paramsBillions, reportedSizeBytes, method }, training { baseModel, dataset, epochs }, and a `note` field explaining that real .gguf weights require SynapGPU Desktop.
+  - Wraps it in a `Blob` with `type: 'application/json'`.
+  - Creates an object URL, attaches it to a dynamically-created `<a download>` element, clicks it, and revokes the URL after 1s.
+  - Filename: `<model name without .gguf>.manifest.json`.
+- Updated `TrainedModel` interface to also carry `method` and `trainedAt` (was missing before).
+- Updated `startTraining()` to populate `method: trainParams.method` and `trainedAt: Date.now()` on the TrainedModel object it builds from the API response.
+- Updated the Download button's onClick to call `downloadTrainedModel(trainedModel)` and log a success message.
+
+Stage Summary:
+- File touched: `src/components/platform/chat-tester.tsx` only.
+- Behavior after fix: After completing a training job in the Test tab → Trained mode, clicking "Download" now triggers a real browser download of `<name>.manifest.json` containing the training-job metadata. The manifest is self-documenting — it explicitly notes that real .gguf weights require SynapGPU Desktop.
