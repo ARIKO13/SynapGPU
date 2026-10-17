@@ -86,9 +86,9 @@
             <button id="clear-datasets-btn" class="btn-ghost hidden">Clear</button>
           </div>
           <div id="dropzone-dataset" class="dropzone" tabindex="0">
-            <input id="file-input-dataset" type="file" multiple accept=".json,.jsonl,.csv,.tsv,.parquet,.arrow,.feather,.txt,.zst,.zstd" hidden />
+            <input id="file-input-dataset" type="file" multiple accept=".json,.jsonl,.csv,.tsv,.parquet,.arrow,.feather,.txt,.zst,.zstd,.zip" hidden />
             <p class="dz-primary">Drop datasets</p>
-            <p class="dz-secondary">.jsonl .csv .parquet .zst .arrow</p>
+            <p class="dz-secondary">.jsonl .csv .parquet .zst .zip</p>
           </div>
           <div id="dataset-list" class="file-list">
             <div class="empty-state"><p>No datasets yet</p></div>
@@ -468,6 +468,6 @@
   </div>
 
   <script src="/static/js/socket.io.min.js"></script>
-  <script src="/static/js/app.js?v=061"></script>
+  <script src="/static/js/app.js?v=070"></script>
 </body>
 </html>

@@ -606,6 +606,7 @@ def list_files():
 
 @app.route("/api/files", methods=["POST"])
 def upload_files():
+    import zipfile
     saved = []
     for key in request.files:
         for f in request.files.getlist(key):
@@ -624,6 +625,39 @@ def upload_files():
                 )
                 files_registry.append(rec)
             saved.append(serialize_file(rec))
+
+            # Auto-extract .zip files — register each extracted file
+            if safe_name.lower().endswith('.zip'):
+                try:
+                    extract_dir = UPLOAD_DIR / f"{fid}-extracted"
+                    extract_dir.mkdir(exist_ok=True)
+                    with zipfile.ZipFile(dest, 'r') as zf:
+                        members = [m for m in zf.namelist() if not m.startswith('__MACOSX') and not m.startswith('.')]
+                        for member in members:
+                            # Skip directories
+                            if member.endswith('/'):
+                                continue
+                            # Extract
+                            zf.extract(member, extract_dir)
+                            extracted_path = extract_dir / member
+                            if not extracted_path.is_file():
+                                continue
+                            member_name = Path(member).name
+                            member_size = extracted_path.stat().st_size
+                            member_category = categorize(member_name)
+                            member_id = str(uuid.uuid4())
+                            with files_lock:
+                                member_rec = FileRecord(
+                                    id=member_id, name=member_name, size_bytes=member_size,
+                                    category=member_category, uploaded_at=time.time(),
+                                    saved_path=str(extracted_path),
+                                )
+                                files_registry.append(member_rec)
+                            saved.append(serialize_file(member_rec))
+                    print(f"[upload] Extracted {len(saved)} files from {safe_name}")
+                except Exception as e:
+                    print(f"[upload] Failed to extract zip {safe_name}: {e}")
+
     with files_lock:
         files = [serialize_file(f) for f in files_registry]
     total = sum(f.size_bytes for f in files_registry)
