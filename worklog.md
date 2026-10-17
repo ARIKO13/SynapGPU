@@ -107,3 +107,28 @@ Work Log:
 Stage Summary:
 - File touched: `src/components/platform/platform-header.tsx` only.
 - Behavior after fix: header now shows a prominent emerald "Download Desktop" button. On Windows it deep-links straight to the .zip download (browser saves the file directly). On macOS/Linux it opens the GitHub releases page in a new tab. Click also leaves a log entry in the Console tab.
+
+---
+Task ID: fix-5
+Agent: main
+Task: User reported dashboard STILL showing "Connecting…" across multiple browsers after my previous fixes. Real diagnosis needed — not a cache issue.
+
+Work Log:
+- Used agent-browser (headless Chrome) to actually load the page and inspect, instead of guessing about cache.
+- Found via direct DOM inspection: the new UI IS rendering correctly (Pre-trained/Trained buttons visible, Download Desktop link present in header, auto-fill of .gguf file DOES work when uploading via JS).
+- Found the REAL bug: socket.io client was being CREATED in the hook (verified via console.log), but NO network requests to /socket.io/ were being made. Dashboard panel showed "Menunggu koneksi telemetry…" because the socket never connected, and after 8s my fallback flipped it to "Backend offline".
+- Diagnosed: socket.io-client v4.8.4 default `transports: ['websocket', 'polling']` tries WebSocket upgrade first. The Next.js rewrite proxy I added in next.config.ts (source: /socket.io/:path* → http://localhost:3003/socket.io/:path*) doesn't handle WebSocket upgrades correctly — the WS upgrade silently stalls. The client never falls back to polling, so it never connects.
+
+Root cause fixes:
+- next.config.ts: added `rewrites()` to proxy /socket.io/* from Next.js → bun metrics service on port 3003. This makes the socket.io client work transparently regardless of how the user accesses the preview URL (direct localhost:3000, via Caddy port 81 with XTransformPort query, or via external preview gateway). Previously the hook relied on `io('/?XTransformPort=3003')` which only worked if the gateway preserved the query param — that's why it worked in some configurations but not in the user's.
+- use-metrics-socket.ts: changed socket.io client options from default `['websocket', 'polling']` to `transports: ['polling'], upgrade: false`. This forces HTTP long-polling which works reliably through Next.js's rewrite proxy. WebSocket transport through Next.js rewrites is broken (silent upgrade failure) — sticking to polling is the robust choice for a preview environment.
+- Removed debug console.logs that I added during diagnosis.
+
+Stage Summary:
+- Files touched: `next.config.ts` (added rewrites() block), `src/hooks/use-metrics-socket.ts` (transports + path + upgrade options, removed debug logs).
+- Verified end-to-end via agent-browser:
+  - Dashboard shows live metrics: "Sistem idle, GPU Util 0.0%, VRAM 0.0/24 GB, RAM 10%, SSD 30.5%, GPU Temp 36°C, GPU Power 38W".
+  - Test LLM tab shows Pre-trained Model / Trained Model buttons + model dropdown + Load button.
+  - Download Desktop link in header (Windows deep-link to GitHub release .zip, macOS/Linux → releases page).
+  - No JS console errors.
+- Final URL works without any query param manipulation: just open the preview URL and the dashboard connects automatically.

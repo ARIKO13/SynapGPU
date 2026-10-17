@@ -22,9 +22,23 @@ import { usePlatformStore, type Metrics, type RunState } from '@/store/platform-
  */
 export function useMetricsSocket() {
   useEffect(() => {
-    const socket = io('/?XTransformPort=3003', {
-      transports: ['websocket', 'polling'],
-      forceNew: true,
+    // Connect to /socket.io/ on the same origin. Next.js rewrites this to
+    // http://localhost:3003/socket.io/ via next.config.ts → rewrites(), so
+    // the socket.io client doesn't need to know the metrics service port
+    // or rely on the external preview gateway preserving any query param.
+    //
+    // Note: we use `polling` transport only with `upgrade: false`. The
+    // default `['websocket', 'polling']` ordering with v4.8.4 was causing
+    // the client to attempt a WebSocket upgrade first that silently
+    // stalled through Next.js's rewrite proxy — the client never fell
+    // back to polling and never connected. Polling-only is also more
+    // robust through reverse proxies (Caddy, Cloudflare, etc.) that may
+    // not handle the WS upgrade cleanly.
+    const socket = io({
+      path: '/socket.io/',
+      transports: ['polling'],
+      upgrade: false,
+      autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1200,
