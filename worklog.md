@@ -165,3 +165,39 @@ Stage Summary:
 - Files touched: `src/app/page.tsx` (file rehydration on mount), `src/components/platform/chat-tester.tsx` (localStorage persistence for trained model + chat footer disclaimer).
 - Verified end-to-end via agent-browser (headless Chrome): dashboard live metrics ✓, file upload + auto-select ✓, load model + state transition loading→running ✓, send chat + streaming response ✓, training flow + trained model panel ✓, download manifest ✓, page reload + state restoration ✓, console logs clean ✓, no JS errors ✓.
 - Note on GitHub release: code is ready locally. To publish a new GitHub release (e.g. v0.9.0), the user needs to: (1) git push origin main, (2) git tag v0.9.0 && git push origin v0.9.0, (3) build via build.sh/build.bat, (4) upload the .zip to GitHub releases UI or via `gh release create v0.9.0 SynapGPU-Windows.zip`. Cannot do this from the sandbox without the user's GitHub credentials.
+
+---
+Task ID: fix-7
+Agent: main
+Task: User complained "pas teken tombol download masi versi alam" (still old version). Diagnose: the Download Desktop button was hard-coded to https://github.com/ARIKO13/SynapGPU/releases/latest/download/SynapGPU-Windows.zip — which is v0.8.0 (binary built from OLD source before any of my fixes). The fixes I've committed live in /home/z/my-project/.git locally and have NOT been pushed to GitHub (no remote configured, no GitHub CLI auth, no credentials).
+
+Work Log:
+- Verified no way to push to GitHub from the sandbox (no `git remote`, no `gh` CLI, no auth tokens).
+- Decided the honest path: serve the latest source code directly from the sandbox, zipped on-the-fly. The user gets a build with ALL fixes baked in, even though it's source code (requires `pip install`) instead of a prebuilt .exe.
+
+Implementation:
+- New endpoint `src/app/api/download/desktop/route.ts`:
+  - Walks the `synapgpu-desktop/` folder.
+  - Excludes node_modules, .git, __pycache__, .pyc, build/, dist/, .spec.
+  - Generates a zip on-the-fly using a hand-written PKZIP STORE-method writer (no zlib dependency — SynapGPU Desktop source is ~220KB, compression gains nothing).
+  - Computes CRC32 for each file, writes local headers, central directory, and EOCD record.
+  - Prepends a generated README-LATEST.md explaining what's in the build, what's fixed vs. v0.8.0, and how to run (`pip install -r requirements.txt && python app.py`).
+  - Returns the zip with proper Content-Type: application/zip and Content-Disposition: attachment; filename="SynapGPU-Desktop-latest-YYYY-MM-DD.zip".
+
+- Updated `src/components/platform/platform-header.tsx`:
+  - The primary "Download Desktop" button now points to `/api/download/desktop` (local zip, always latest) instead of GitHub releases.
+  - Button label now shows a "LATEST" badge so the user knows it's the fresh build.
+  - Added a SECONDARY link to GitHub releases (label "v0.8.0", gray styling, Github icon) so users who specifically want the prebuilt Windows .exe can still reach it with one click.
+  - Removed the OS-based deep-link logic (was Windows-specific deep-link to GitHub asset) since the new local zip works on any OS.
+
+Verified:
+- `curl http://localhost:3000/api/download/desktop` → 200, 218,921 bytes, Content-Type: application/zip.
+- `unzip -l` shows 11 files (README-LATEST.md + README.md + app.py + build.bat + build.sh + llm_fetch.py + requirements.txt + static/css/styles.css + static/index.html + static/js/app.js + static/js/socket.io.min.js).
+- `file` confirms it's a valid ZIP archive.
+- Extracted static/js/app.js contains `connectionFailed` (8 mentions), `populateModelSelects` (9 mentions), `newLlm=d.created.find` (auto-select logic) — all my fixes are baked in.
+- Browser test via agent-browser: clicking "Download Desktop LATEST" triggers the download (XHR captured, no navigation away from page).
+- Two visible buttons in header now: "Download Desktop LATEST" (emerald, primary) and "v0.8.0" (gray, secondary, links to GitHub releases).
+
+Stage Summary:
+- Files touched: `src/app/api/download/desktop/route.ts` (new, ~280 lines), `src/components/platform/platform-header.tsx` (updated download button logic + added secondary GitHub link).
+- Note: this gives the user the LATEST SOURCE with all fixes. To get a prebuilt Windows .exe with the same fixes, the user still needs to: (1) git push origin main, (2) git tag v0.9.0 && git push origin v0.9.0, (3) build via build.bat on a Windows machine, (4) upload to GitHub releases UI or via `gh release create`. None of those steps can be done from this sandbox without the user's GitHub credentials.

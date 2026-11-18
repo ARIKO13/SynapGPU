@@ -48,14 +48,25 @@ export function PlatformHeader() {
     else setOs('unknown')
   }, [])
 
-  // GitHub releases — repo: ARIKO13/SynapGPU. Latest tag is v0.8.0 and ships
-  // `SynapGPU-Windows.zip`. We deep-link to the asset for the detected OS so
-  // the user doesn't have to navigate the GitHub releases page themselves.
-  const repoReleases = 'https://github.com/ARIKO13/SynapGPU/releases/latest'
-  const downloadHref =
-    os === 'windows'
-      ? 'https://github.com/ARIKO13/SynapGPU/releases/latest/download/SynapGPU-Windows.zip'
-      : repoReleases // macOS/Linux: no prebuilt binary yet → land on releases page
+  // Download link for SynapGPU Desktop.
+  //
+  // Two flavors:
+  // 1. Pre-built Windows binary from GitHub releases — convenient (no Python
+  //    install needed) but always lags behind the latest fixes because
+  //    publishing a new release is a manual `git tag + build + upload` flow.
+  //    Currently the latest release is v0.8.0, which predates all the recent
+  //    fixes (dashboard offline handling, trained-model persistence, chat
+  //    disclaimer, etc.).
+  // 2. Latest source code, zipped on-the-fly from this sandbox via
+  //    /api/download/desktop — always has the freshest fixes, but requires
+  //    the user to run `pip install -r requirements.txt && python app.py`
+  //    instead of just double-clicking an .exe.
+  //
+  // Default to flavor #2 (source) because that's the one with all the fixes.
+  // The user can still get the Windows .exe from GitHub via the secondary
+  // link in the tooltip / chat-tester disclaimer.
+  const downloadHref = '/api/download/desktop'
+  const githubReleasesHref = 'https://github.com/ARIKO13/SynapGPU/releases/latest'
 
   function onDownloadClick() {
     log(`Membuka halaman download SynapGPU Desktop (${os || 'unknown OS'})…`, 'info')
@@ -126,36 +137,37 @@ export function PlatformHeader() {
           </div>
         )}
 
-        {/* Download SynapGPU Desktop — deep-links to the GitHub release asset
-            for the user's detected OS. Hidden on small screens to save space;
-            it's also reachable from the chat-tester's "Trained Model" panel
-            via the manifest.json download note. */}
+        {/* Download SynapGPU Desktop — serves the latest source code from
+            this sandbox (with all the recent fixes baked in), zipped
+            on-the-fly by /api/download/desktop. Always fresh.
+            For the prebuilt Windows .exe (currently v0.8.0, no fixes yet),
+            see the link in the chat-tester disclaimer. */}
         <a
           href={downloadHref}
-          target="_blank"
-          rel="noopener noreferrer"
           onClick={onDownloadClick}
           className={cn(
-            'hidden items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition sm:flex',
+            'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition',
             'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20',
           )}
-          title={
-            os === 'windows'
-              ? 'Download SynapGPU-Windows.zip (~14 MB, no install needed)'
-              : os === 'mac'
-                ? 'Download SynapGPU Desktop (macOS — build from source)'
-                : os === 'linux'
-                  ? 'Download SynapGPU Desktop (Linux — build from source)'
-                  : 'Download SynapGPU Desktop from GitHub'
-          }
+          title="Download SynapGPU Desktop source code (latest, with all fixes). Run `pip install -r requirements.txt && python app.py` to start."
         >
-          {os === 'mac' ? <Apple className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+          <Download className="h-3.5 w-3.5" />
           <span>Download Desktop</span>
-          {os === 'windows' && (
-            <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider">
-              Win
-            </span>
-          )}
+          <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider">
+            Latest
+          </span>
+        </a>
+
+        {/* Secondary: link to GitHub releases for the prebuilt Windows .exe. */}
+        <a
+          href={githubReleasesHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900/60 px-2.5 py-1.5 text-[10px] font-medium text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200 sm:flex"
+          title="Prebuilt Windows .exe on GitHub (v0.8.0, no recent fixes yet)"
+        >
+          <Github className="h-3 w-3" />
+          <span>v0.8.0</span>
         </a>
 
         {/* Connection */}
