@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { Activity, Terminal, MessageSquare, Cpu, MemoryStick, HardDrive } from 'lucide-react'
-import { usePlatformStore } from '@/store/platform-store'
+import { usePlatformStore, type FileRecord } from '@/store/platform-store'
 import { useMetricsSocket } from '@/hooks/use-metrics-socket'
 import { PlatformHeader } from '@/components/platform/platform-header'
 import { FileSidebar } from '@/components/platform/file-sidebar'
@@ -57,13 +57,37 @@ export default function Home() {
   useMetricsSocket()
 
   const files = usePlatformStore((s) => s.files)
+  const addFiles = usePlatformStore((s) => s.addFiles)
   const runState = usePlatformStore((s) => s.runState)
   const log = usePlatformStore((s) => s.log)
 
-  // Welcome message once on mount.
+  // Welcome message once on mount + re-fetch any previously uploaded files
+  // from the server. Files are persisted server-side in /api/files (in-memory),
+  // so a page reload would otherwise leave the sidebar empty even though the
+  // server still knows about the files. This fetch restores them on mount.
   useEffect(() => {
     log('ColabGPU siap. Drag & drop file LLM/dataset ke sidebar, lalu klik Run.', 'info')
-  }, [log])
+    ;(async () => {
+      try {
+        const res = await fetch('/api/files')
+        if (!res.ok) return
+        const data = await res.json()
+        const serverFiles: FileRecord[] = (data.files ?? []).map((f: FileRecord) => ({
+          ...f,
+          uploadedAt: typeof f.uploadedAt === 'string' ? Date.parse(f.uploadedAt) : f.uploadedAt,
+        }))
+        // Only add files the store doesn't already know about (de-dup by id).
+        const known = new Set(usePlatformStore.getState().files.map((f) => f.id))
+        const newOnes = serverFiles.filter((f) => !known.has(f.id))
+        if (newOnes.length > 0) {
+          addFiles(newOnes)
+          log(`Memulihkan ${newOnes.length} file dari sesi sebelumnya.`, 'info')
+        }
+      } catch {
+        // Non-fatal — server may not be reachable yet, but UI still works.
+      }
+    })()
+  }, [log, addFiles])
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">

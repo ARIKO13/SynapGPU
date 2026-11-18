@@ -94,7 +94,24 @@ export function ChatTester() {
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<LoaderMode>('pretrained')
   const [selectedModelId, setSelectedModelId] = useState<string>('')
-  const [trainedModel, setTrainedModel] = useState<TrainedModel | null>(null)
+  // Persist trained model in localStorage so a page reload doesn't lose it.
+  // Without this, the user would have to re-train after every refresh —
+  // especially annoying since training takes ~1.2s+ even in simulation.
+  const [trainedModel, setTrainedModelState] = useState<TrainedModel | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const raw = window.localStorage.getItem('synapgpu:trainedModel')
+      return raw ? JSON.parse(raw) as TrainedModel : null
+    } catch { return null }
+  })
+  const setTrainedModel = (m: TrainedModel | null) => {
+    setTrainedModelState(m)
+    try {
+      if (typeof window === 'undefined') return
+      if (m) window.localStorage.setItem('synapgpu:trainedModel', JSON.stringify(m))
+      else window.localStorage.removeItem('synapgpu:trainedModel')
+    } catch { /* non-fatal */ }
+  }
   const [isTraining, setIsTraining] = useState(false)
   const [trainParams, setTrainParams] = useState({
     datasetId: '',
@@ -618,7 +635,7 @@ export function ChatTester() {
           )}
         </div>
         <p className="mt-2 text-[10px] text-zinc-600">
-          Powered by z-ai-web-dev-sdk · Streaming response · Token-by-token display
+          Web preview: chat dijawab oleh GLM via z-ai-web-dev-sdk, bukan file .gguf yang Anda upload. Untuk inference .gguf sungguhan, jalankan <a href="https://github.com/ARIKO13/SynapGPU/releases/latest" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">SynapGPU Desktop</a>.
         </p>
       </div>
     </div>
