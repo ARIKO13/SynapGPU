@@ -164,10 +164,10 @@ export function PlatformHeader() {
           target="_blank"
           rel="noopener noreferrer"
           className="hidden items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900/60 px-2.5 py-1.5 text-[10px] font-medium text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200 sm:flex"
-          title="Prebuilt Windows .exe on GitHub (v0.8.0, no recent fixes yet)"
+          title="SynapGPU v0.9.0 source code on GitHub Releases (no prebuilt Windows .exe yet — build via build.bat)"
         >
           <Github className="h-3 w-3" />
-          <span>v0.8.0</span>
+          <span>v0.9.0</span>
         </a>
 
         {/* Connection */}
