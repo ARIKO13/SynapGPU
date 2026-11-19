@@ -35,6 +35,8 @@ const EXCLUDE_PATTERNS = [
   /build\/$/i,
   /dist\/$/i,
   /\.spec$/i, // PyInstaller spec is for building, not running
+  /\.venv/i, // local venv created by RUN.bat on the user's machine
+  /python-installer\.exe$/i, // leftover Python installer from RUN.bat
 ]
 
 interface FileEntry {
@@ -200,10 +202,25 @@ sandbox, built ${new Date().toISOString()}.
 - Training produces a downloadable manifest .json file.
 - Trained model state persists across page reloads (localStorage).
 
-## Quickstart (run from source)
+## Quickstart (Windows — easiest)
+
+Just double-click **\`RUN.bat\`** in this folder. That's it.
+
+What RUN.bat does on first run:
+1. Finds Python 3 on your PATH (or auto-installs Python 3.11 from python.org)
+2. Creates a virtual environment (\`.venv\`)
+3. Installs dependencies (flask, flask-socketio, psutil, ~30 MB)
+4. Starts the server at http://localhost:3000 (browser opens automatically)
+
+Subsequent runs are instant — just double-click \`RUN.bat\` again.
+Keep the CMD window open while you use the app; close it to stop the server.
+
+## Quickstart (macOS / Linux / manual)
 
 \`\`\`bash
 cd synapgpu-desktop
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 python app.py
 # → open http://localhost:3000 in your browser
@@ -217,7 +234,7 @@ build.bat
 \`\`\`
 
 Produces dist/SynapGPU/SynapGPU.exe — distribute the entire dist/SynapGPU/
-folder to end users.
+folder to end users who don't want to install Python.
 
 ## Files included
 ${files.map((f) => `- ${f.archivePath}`).join('\n')}
