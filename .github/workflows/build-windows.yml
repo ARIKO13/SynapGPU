@@ -1,0 +1,108 @@
+name: Build Windows .exe
+
+# Builds the SynapGPU Desktop PyInstaller bundle on a Windows runner and
+# attaches the resulting .zip to the matching GitHub Release.
+#
+# Triggers:
+#   1. Automatic — whenever a v* tag is pushed (e.g. v0.9.1, v0.10.0).
+#   2. Manual    — via the Actions tab "Run workflow" button, with a `tag`
+#                  input that says which existing tag to build for. This is
+#                  how we back-fill releases that were tagged before this
+#                  workflow existed (e.g. v0.9.0).
+#
+# Output: SynapGPU-Windows-<tag>.zip attached to the release, containing
+# dist/SynapGPU/* (SynapGPU.exe + bundled Python + dependencies + static/).
+# End users extract + double-click SynapGPU.exe — no Python install needed.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and attach the .exe to (e.g. v0.9.0)'
+        required: true
+        default: 'v0.9.0'
+
+# We need contents:write to upload assets to the release via the
+# automatically-provided GITHUB_TOKEN. This is safe — the token is scoped
+# to this repo and only valid for the duration of the workflow run.
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # For workflow_dispatch, github.ref is the default branch — we need
+          # to override with the tag the user typed in. For tag-push triggers,
+          # github.ref IS the tag, so the input is empty and we fall back.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: synapgpu-desktop/requirements.txt
+
+      - name: Install dependencies
+        working-directory: synapgpu-desktop
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        working-directory: synapgpu-desktop
+        shell: pwsh
+        run: |
+          pyinstaller SynapGPU.spec --noconfirm --clean
+          # Verify the exe was actually produced
+          if (-not (Test-Path "dist\SynapGPU\SynapGPU.exe")) {
+            throw "Build failed: dist\SynapGPU\SynapGPU.exe not found"
+          }
+          $size = (Get-Item "dist\SynapGPU\SynapGPU.exe").Length
+          Write-Host "Built SynapGPU.exe ($([math]::Round($size/1MB, 2)) MB)"
+
+      - name: Compute tag name
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            # github.ref is refs/tags/v0.9.1 → strip the prefix
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Zip the dist folder
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.tag.outputs.name }}"
+          $zipPath = "SynapGPU-Windows-$tag.zip"
+          Compress-Archive -Path "synapgpu-desktop\dist\SynapGPU\*" -DestinationPath $zipPath
+          $size = (Get-Item $zipPath).Length
+          Write-Host "Created $zipPath ($([math]::Round($size/1MB, 2)) MB)"
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          files: SynapGPU-Windows-${{ steps.tag.outputs.name }}.zip
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        shell: bash
+        run: |
+          echo "### Windows Build Complete ✓" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Attached \`SynapGPU-Windows-${{ steps.tag.outputs.name }}.zip\` to release ${{ steps.tag.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "Download: https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.name }}/SynapGPU-Windows-${{ steps.tag.outputs.name }}.zip" >> $GITHUB_STEP_SUMMARY
