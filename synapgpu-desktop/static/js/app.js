@@ -138,6 +138,13 @@ async function uploadFiles(fl) {
       const tms=$('#train-model-select'); if(tms && !tms.value) tms.value=newLlm.id;
       updateTrainButton();
     }
+    // Same auto-fill for newly uploaded datasets: pre-select in Train tab's
+    // dataset dropdown so Start Training becomes clickable immediately.
+    const newDs=d.created.find(f=>['dataset','notebook'].includes(f.category));
+    if(newDs){
+      const tds=$('#train-dataset-select'); if(tds && !tds.value) tds.value=newDs.id;
+      updateTrainButton();
+    }
   } catch(e) { log(`Upload failed: ${e.message}`,'error'); }
 }
 async function deleteFile(id) { try { const r=await fetch(`/api/files?id=${id}`,{method:'DELETE'}); if(r.ok){state.files=state.files.filter(f=>f.id!==id); log('File deleted.','info'); renderFiles(); renderRunState(); populateModelSelects();} } catch(e){} }
@@ -202,13 +209,26 @@ let trainedModel=null; // {name, size, params, base, dataset, epochs, fileId, pa
 function populateModelSelects(){
   const sel=$('#pretrained-model-select');if(!sel)return;
   const llmFiles=state.files.filter(f=>f.category==='llm');
+  // Save current selections before rebuilding innerHTML (which clears them).
+  // Without this, uploading any new file wipes the user's dropdown choice in
+  // the Train tab — super annoying when they've picked a base model and then
+  // drop a dataset, only to find the base model select reset to "Select…".
+  const prevSel=sel.value;
+  const tms=$('#train-model-select');const prevTms=tms?tms.value:'';
+  const tds=$('#train-dataset-select');const prevTds=tds?tds.value:'';
+  // Rebuild
   let opts='<option value="">Select .gguf from Models ↑</option>';
   llmFiles.forEach(f=>{opts+=`<option value="${f.id}">${escapeHtml(f.name)} (${f.humanSize})</option>`;});
   sel.innerHTML=opts;
-  const btn=$('#load-pretrained-btn');if(btn)btn.disabled=!llmFiles.length;
-  // Update train tab selects too
-  const tms=$('#train-model-select');if(tms){tms.innerHTML='<option value="">Select from Models ↑</option>'+llmFiles.map(f=>`<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');}
-  const tds=$('#train-dataset-select');if(tds){const ds=state.files.filter(f=>['dataset','notebook'].includes(f.category));tds.innerHTML='<option value="">Select from Datasets ↑</option>'+ds.map(f=>`<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');}
+  // Restore prevSel if that option still exists, else leave at placeholder.
+  if(prevSel && Array.from(sel.options).some(o=>o.value===prevSel)) sel.value=prevSel;
+  const btn=$('#load-pretrained-btn');if(btn)btn.disabled=!sel.value;
+  // Update train tab selects too. Include size in the label so duplicate
+  // filenames (e.g. user re-uploaded the same .gguf) can be told apart.
+  if(tms){tms.innerHTML='<option value="">Select from Models ↑</option>'+llmFiles.map(f=>`<option value="${f.id}">${escapeHtml(f.name)} (${f.humanSize})</option>`).join('');
+    if(prevTms && Array.from(tms.options).some(o=>o.value===prevTms)) tms.value=prevTms;}
+  if(tds){const ds=state.files.filter(f=>['dataset','notebook'].includes(f.category));tds.innerHTML='<option value="">Select from Datasets ↑</option>'+ds.map(f=>`<option value="${f.id}">${escapeHtml(f.name)} (${f.humanSize})</option>`).join('');
+    if(prevTds && Array.from(tds.options).some(o=>o.value===prevTds)) tds.value=prevTds;}
   // Enable Start Training button if both selected
   updateTrainButton();
 }
@@ -437,7 +457,7 @@ function renderFiles(){
 }
 function renderConsole(){const o=$('#console-output');$('#console-count').textContent=`${state.consoleLines.length} lines`;if(!state.consoleLines.length){o.innerHTML='<div class="console-empty">No output yet.</div>';return;}const I={info:'ℹ',warn:'⚠',error:'✗',success:'✓'};let h='';state.consoleLines.forEach(l=>{const ts=new Date(l.ts).toLocaleTimeString('en-US',{hour12:false});h+=`<div class="console-line ${l.level}"><span class="ts">${ts}</span><span class="level">${I[l.level]||'ℹ'}</span><span class="text">${escapeHtml(l.text)}</span></div>`;});o.innerHTML=h;o.scrollTop=o.scrollHeight;}
 function renderChatMessages(){const c=$('#chat-messages');if(!state.chatMessages.length){const sub=state.runState!=='running'?'Click Run to load model first.':'Type a message and press Cmd/Ctrl+Enter.';c.innerHTML=`<div class="chat-empty"><p class="ce-sub">${sub}</p></div>`;return;}const UA='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';const AA='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>';let h='';state.chatMessages.forEach(m=>{const iu=m.role==='user';let c2=escapeHtml(m.content);if(m.streaming&&!m.content)c2='<span class="chat-thinking">thinking…</span>';else if(m.streaming)c2+='<span class="chat-cursor"></span>';const meta=m.latencyMs?`<div class="chat-meta">${(m.latencyMs/1000).toFixed(2)}s</div>`:'';h+=`<div class="chat-message ${m.role}"><div class="chat-avatar ${m.role}">${iu?UA:AA}</div><div class="chat-bubble-wrap"><div class="chat-bubble">${c2}</div>${meta}</div></div>`;});c.innerHTML=h;c.scrollTop=c.scrollHeight;}
-function renderChatInput(){const i=$('#chat-input'),s=$('#chat-send-btn'),b=$('#chat-stop-btn');if(state.runState==='running'||webllmEngine||wllamaInstance){i.disabled=false;i.placeholder='Type a message… (Cmd/Ctrl+Enter)';}else{i.disabled=true;i.placeholder='Run model first…';}if(state.chatStreaming){s.classList.add('hidden');b.classList.remove('hidden');}else{s.classList.remove('hidden');b.classList.add('hidden');s.disabled=!(state.runState==='running'||webllmEngine||wllamaInstance)||!i.value.trim();}}
+function renderChatInput(){const i=$('#chat-input'),s=$('#chat-send-btn'),b=$('#chat-stop-btn');if(state.runState==='running'){i.disabled=false;i.placeholder='Type a message… (Cmd/Ctrl+Enter)';}else{i.disabled=true;i.placeholder='Run model first…';}if(state.chatStreaming){s.classList.add('hidden');b.classList.remove('hidden');}else{s.classList.remove('hidden');b.classList.add('hidden');s.disabled=state.runState!=='running'||!i.value.trim();}}
 function renderBenchmark(){const e=$('#benchmark-empty'),c=$('#benchmark-content'),p=$('#benchmark-tab-pulse');if(!state.benchmarkResults.length){e.classList.remove('hidden');c.classList.add('hidden');p.classList.add('hidden');return;}e.classList.add('hidden');c.classList.remove('hidden');p.classList.remove('hidden');renderVerdict();renderDimScores();renderRadarChart();renderBarChart();renderTestHistory();renderCompareSelect();}
 function renderVerdict(){const v=computeVerdict();const tc=state.benchmarkResults.length;$('#verdict-tests-count').textContent=`${tc} test${tc===1?'':'s'}`;if(!v){$('#verdict-main').innerHTML='<span class="dim">No data.</span>';$('#verdict-detail').textContent='';$('#verdict-report').innerHTML='';return;}const cl=v.closest,op=Math.abs(cl.diff)<=3;let mh;if(op)mh=`Setara dengan <span class="highlight">${cl.name}</span> <span class="dim">(${Math.abs(cl.diff)} poin · ${v.userOverall} vs ${cl.overall})</span>`;else if(cl.diff>0)mh=`Mengalahkan <span class="highlight">${cl.name}</span> <span class="dim">(+${cl.diff} poin · ${v.userOverall} vs ${cl.overall})</span>`;else mh=`Kalah tipis dari <span class="highlight">${cl.name}</span> <span class="dim">(${Math.abs(cl.diff)} poin · ${v.userOverall} vs ${cl.overall})</span>`;$('#verdict-main').innerHTML=mh;const paramsInfo=state.userModelParamsB>0?` · Your model: ${state.userModelParamsB}B params`:'';$('#verdict-detail').textContent=`Skor: ${v.userOverall}/100 dari ${tc} test. Dibandingkan ${v.comparisons.length} LLM dengan parameter serupa${paramsInfo}`;const onPar=v.comparisons.filter(c=>c.key!==cl.key&&Math.abs(c.diff)<=3);const beats=v.beats.filter(c=>c.key!==cl.key);const loses=v.losesTo.filter(c=>c.key!==cl.key);let h='';h+=`<div class="report-section"><div class="report-section-header"><span class="report-section-title neutral">Setara dengan</span><span class="report-section-count">${onPar.length} LLM</span></div>`;if(!onPar.length)h+=`<div class="report-empty">Tidak ada yang setara.</div>`;else{h+=`<div class="report-list">`;onPar.forEach(c=>{h+=`<div class="report-row neutral"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff neutral">${c.diff>0?'+':''}${c.diff}</span></div>`;});h+=`</div>`;}h+=`</div>`;h+=`<div class="report-section"><div class="report-section-header"><span class="report-section-title pos">Mengalahkan</span><span class="report-section-count">${beats.length} LLM</span></div>`;if(!beats.length)h+=`<div class="report-empty">Belum mengalahkan LLM manapun.</div>`;else{h+=`<div class="report-list">`;beats.forEach(c=>{h+=`<div class="report-row pos"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff pos">+${c.diff}</span></div>`;});h+=`</div>`;}h+=`</div>`;h+=`<div class="report-section"><div class="report-section-header"><span class="report-section-title neg">Kalah dari</span><span class="report-section-count">${loses.length} LLM</span></div>`;if(!loses.length)h+=`<div class="report-empty">Tidak ada yang lebih kuat — juara!</div>`;else{h+=`<div class="report-list">`;loses.forEach(c=>{h+=`<div class="report-row neg"><span class="report-name">${escapeHtml(c.name)}</span><span class="report-score">${c.overall}/100</span><span class="report-diff neg">${c.diff}</span></div>`;});h+=`</div>`;}h+=`</div>`;h+=`<div class="report-source">Source: ${escapeHtml(state.benchmarkSource||'static fallback')}${paramsInfo}</div>`;$('#verdict-report').innerHTML=h;}
 function renderDimScores(){const s=aggScores();const c=$('#dim-scores');if(!s){c.innerHTML='';return;}let h='';DIMENSIONS.forEach(d=>{const v=s[d.key];h+=`<div class="dim-row"><div class="dim-label-row"><span class="dim-label">${d.label}</span><span class="dim-value">${v}/100</span></div><div class="dim-bar-bg"><div class="dim-bar"style="width:${v}%"></div></div><div class="dim-hint">${d.hint}</div></div>`;});c.innerHTML=h;}

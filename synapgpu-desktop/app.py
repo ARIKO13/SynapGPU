@@ -1063,7 +1063,11 @@ if __name__ == "__main__":
     print(f"  LLM source:  {llm_fetch.get_benchmark_source()}")
     print(f"  Static dir:  {STATIC_DIR}")
     print(f"  Upload dir:  {UPLOAD_DIR}")
-    print(f"  Listening:   http://localhost:3000")
+    # Port is configurable via env var so multiple instances can run, and so
+    # the default port (3000) can be overridden if it's already in use.
+    port = int(os.environ.get("PORT", "3000"))
+    listen_url = f"http://localhost:{port}"
+    print(f"  Listening:   {listen_url}")
     print("=" * 60)
     print("Press Ctrl+C to stop.")
 
@@ -1071,16 +1075,15 @@ if __name__ == "__main__":
     def open_browser():
         import time as _t
         _t.sleep(1.5)
-        url = "http://localhost:3000"
         try:
             import webbrowser
-            webbrowser.open(url)
-            print(f"  Browser opened: {url}")
+            webbrowser.open(listen_url)
+            print(f"  Browser opened: {listen_url}")
         except Exception:
-            print(f"  Open manually: {url}")
+            print(f"  Open manually: {listen_url}")
     threading.Thread(target=open_browser, daemon=True).start()
 
     threading.Thread(target=metrics_broadcaster, daemon=True).start()
     # Bind to 0.0.0.0 so external tools (Caddy gateway, other hosts) can reach it.
     # For end users this is fine — they run it locally and access via localhost.
-    socketio.run(app, host="0.0.0.0", port=3000, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
