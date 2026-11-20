@@ -45,6 +45,32 @@ else:
 UPLOAD_DIR = Path(os.environ.get("SYNAPGPU_UPLOADS", str(Path.home() / ".synapgpu" / "uploads")))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def find_free_port(start: int = 3000, max_tries: int = 50) -> int:
+    """Find a free TCP port starting from `start`. Tries start, start+1, ...
+
+    Critical for the .exe: if the Next.js dev server (npm run dev) or any
+    other app is already bound to port 3000, the old code called
+    socketio.run(port=3000) which threw OSError and CRASHED the .exe. The
+    daemon open_browser thread had already fired, so the browser opened
+    localhost:3000 — which showed the NEXT.JS app, not the desktop Flask
+    app. The user thought they were testing the desktop but were actually
+    looking at the web app (with its own bugs / extension errors).
+
+    Now: if 3000 is taken, we automatically use 3001, 3002, ... and open
+    the browser to the CORRECT port.
+    """
+    import socket
+    for p in range(start, start + max_tries):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", p))
+                return p
+        except OSError:
+            continue
+    return start  # fallback — let socketio.run fail with a real error
+
 # ZAI SDK config (optional — for LLM chat fallback if no local inference server)
 CONFIG_PATHS = [
     Path.cwd() / ".z-ai-config",
@@ -596,7 +622,16 @@ socketio = SocketIO(
 
 @app.route("/")
 def index():
-    return send_from_directory(str(STATIC_DIR), "index.html")
+    resp = send_from_directory(str(STATIC_DIR), "index.html")
+    # Force the browser to always re-fetch index.html (no caching). Without
+    # this, the browser may serve a STALE index.html that references an old
+    # ?v=NNN cache-busting query param, so the user never gets the new JS/CSS
+    # even after we ship a fix. This was a likely contributor to "still can't
+    # drop files" — the browser was running week-old app.js.
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @app.route("/api/device-info")
@@ -1108,9 +1143,20 @@ if __name__ == "__main__":
     print(f"  LLM source:  {llm_fetch.get_benchmark_source()}")
     print(f"  Static dir:  {STATIC_DIR}")
     print(f"  Upload dir:  {UPLOAD_DIR}")
-    # Port is configurable via env var so multiple instances can run, and so
-    # the default port (3000) can be overridden if it's already in use.
-    port = int(os.environ.get("PORT", "3000"))
+    # Port selection: if PORT env var is set, use it exactly (user's explicit
+    # choice). Otherwise AUTO-FIND a free port starting from 3000. This is
+    # critical: if Next.js dev server (npm run dev) or another app is already
+    # on port 3000, the old code crashed with OSError and the browser fell
+    # back to showing the Next.js app — the user thought they were testing
+    # the desktop but were actually looking at the web app.
+    if "PORT" in os.environ:
+        port = int(os.environ["PORT"])
+    else:
+        port = find_free_port(3000)
+        if port != 3000:
+            print(f"  ⚠ Port 3000 is in use (Next.js dev server? another app?)")
+            print(f"    → Desktop app will use port {port} instead.")
+            print(f"    → Make sure you're looking at the DESKTOP app tab, not the web app.")
     listen_url = f"http://localhost:{port}"
     print(f"  Listening:   {listen_url}")
     print("=" * 60)
@@ -1131,4 +1177,15 @@ if __name__ == "__main__":
     threading.Thread(target=metrics_broadcaster, daemon=True).start()
     # Bind to 0.0.0.0 so external tools (Caddy gateway, other hosts) can reach it.
     # For end users this is fine — they run it locally and access via localhost.
-    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
+    try:
+        socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
+    except OSError as e:
+        print("=" * 60)
+        print(f"  ✗ FAILED to start server on port {port}: {e}")
+        print(f"    This usually means another app is using port {port}.")
+        print(f"    The desktop app cannot start. Close other apps using port {port}")
+        print(f"    (check: Next.js dev server, another SynapGPU.exe instance)")
+        print(f"    and try again. Or set the PORT env var to a different port.")
+        print("=" * 60)
+        import time as _t
+        _t.sleep(5)  # keep the console window open so the user can read the error
