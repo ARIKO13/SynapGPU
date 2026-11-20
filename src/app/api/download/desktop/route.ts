@@ -259,7 +259,7 @@ ${files
 
     // Add README first.
     const readmeBytes = new TextEncoder().encode(readme)
-    const readmeZip = zipFile('README-LATEST.md', readmeBytes)
+    const readmeZip = zipFile('synapgpu-desktop/README-LATEST.md', readmeBytes)
     centralRecords.push({ header: readmeZip.centralHeader, offset: localOffset })
     zipped.push(readmeZip)
     localOffset += readmeZip.localChunk.length
