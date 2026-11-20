@@ -134,6 +134,29 @@ def categorize(name: str) -> str:
     return "other"
 
 
+def sanitize_filename(name: str) -> str:
+    """Remove Windows-reserved characters and other problematic chars from a
+    filename so f.save(dest) doesn't fail with a 500 on Windows. The previous
+    code used Path(f.filename).name which strips directory components but
+    leaves chars like <>:"/\\|?* that Windows rejects — causing f.save() to
+    throw an unhandled OSError → HTTP 500 → 'Upload failed' toast."""
+    # Take only the basename (strip any path components the browser might send)
+    base = Path(name).name
+    # Replace Windows-reserved chars + control chars with underscore
+    import re
+    base = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', base)
+    # Windows reserves these names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+    stem = Path(base).stem.upper()
+    if stem in {'CON','PRN','AUX','NUL'} or re.match(r'^(COM|LPT)[1-9]$', stem):
+        base = '_' + base
+    # Trim to a safe length (Windows MAX_PATH is 260; leave room for the
+    # upload dir prefix + UUID)
+    if len(base) > 180:
+        ext = Path(base).suffix
+        base = base[:180-len(ext)] + ext
+    return base or 'unnamed_file'
+
+
 def human_size(n: int) -> str:
     if n < 1024: return f"{n} B"
     units = ["KB", "MB", "GB", "TB"]
@@ -559,6 +582,9 @@ def collect_metrics() -> dict:
 # ---------------------------------------------------------------------------
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
 app.config["SECRET_KEY"] = "synapgpu-desktop-secret"
+# Allow large model uploads (GGUF files can be several GB). Without this,
+# Flask/Werkzeug may reject or fail on big uploads. 50GB headroom.
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024 * 1024
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
@@ -606,62 +632,81 @@ def list_files():
 
 @app.route("/api/files", methods=["POST"])
 def upload_files():
-    import zipfile
+    import zipfile, traceback
     saved = []
-    for key in request.files:
-        for f in request.files.getlist(key):
-            if not f or not f.filename:
-                continue
-            fid = str(uuid.uuid4())
-            category = categorize(f.filename)
-            safe_name = Path(f.filename).name
-            dest = UPLOAD_DIR / f"{fid}-{safe_name}"
-            f.save(dest)
-            size = dest.stat().st_size
-            with files_lock:
-                rec = FileRecord(
-                    id=fid, name=safe_name, size_bytes=size, category=category,
-                    uploaded_at=time.time(), saved_path=str(dest),
-                )
-                files_registry.append(rec)
-            saved.append(serialize_file(rec))
-
-            # Auto-extract .zip files — register each extracted file
-            if safe_name.lower().endswith('.zip'):
+    try:
+        for key in request.files:
+            for f in request.files.getlist(key):
+                if not f or not f.filename:
+                    continue
+                fid = str(uuid.uuid4())
+                category = categorize(f.filename)
+                safe_name = sanitize_filename(f.filename)
+                dest = UPLOAD_DIR / f"{fid}-{safe_name}"
+                # Save the uploaded file. This is the step most likely to fail
+                # on Windows (permission, path length, reserved chars) — wrap
+                # it so we get a clear error instead of a bare HTTP 500.
                 try:
-                    extract_dir = UPLOAD_DIR / f"{fid}-extracted"
-                    extract_dir.mkdir(exist_ok=True)
-                    with zipfile.ZipFile(dest, 'r') as zf:
-                        members = [m for m in zf.namelist() if not m.startswith('__MACOSX') and not m.startswith('.')]
-                        for member in members:
-                            # Skip directories
-                            if member.endswith('/'):
-                                continue
-                            # Extract
-                            zf.extract(member, extract_dir)
-                            extracted_path = extract_dir / member
-                            if not extracted_path.is_file():
-                                continue
-                            member_name = Path(member).name
-                            member_size = extracted_path.stat().st_size
-                            member_category = categorize(member_name)
-                            member_id = str(uuid.uuid4())
-                            with files_lock:
-                                member_rec = FileRecord(
-                                    id=member_id, name=member_name, size_bytes=member_size,
-                                    category=member_category, uploaded_at=time.time(),
-                                    saved_path=str(extracted_path),
-                                )
-                                files_registry.append(member_rec)
-                            saved.append(serialize_file(member_rec))
-                    print(f"[upload] Extracted {len(saved)} files from {safe_name}")
-                except Exception as e:
-                    print(f"[upload] Failed to extract zip {safe_name}: {e}")
+                    f.save(dest)
+                except Exception as save_err:
+                    print(f"[upload] f.save FAILED for {safe_name!r} → {dest}: {save_err}")
+                    traceback.print_exc()
+                    return jsonify({
+                        "error": f"Cannot save file '{safe_name}': {save_err}",
+                        "detail": f"Upload dir: {UPLOAD_DIR}",
+                    }), 500
+                size = dest.stat().st_size
+                with files_lock:
+                    rec = FileRecord(
+                        id=fid, name=safe_name, size_bytes=size, category=category,
+                        uploaded_at=time.time(), saved_path=str(dest),
+                    )
+                    files_registry.append(rec)
+                saved.append(serialize_file(rec))
 
-    with files_lock:
-        files = [serialize_file(f) for f in files_registry]
-    total = sum(f.size_bytes for f in files_registry)
-    return jsonify({"created": saved, "files": files, "totalFiles": len(files), "totalSizeBytes": total})
+                # Auto-extract .zip files — register each extracted file
+                if safe_name.lower().endswith('.zip'):
+                    try:
+                        extract_dir = UPLOAD_DIR / f"{fid}-extracted"
+                        extract_dir.mkdir(exist_ok=True)
+                        with zipfile.ZipFile(dest, 'r') as zf:
+                            members = [m for m in zf.namelist() if not m.startswith('__MACOSX') and not m.startswith('.')]
+                            for member in members:
+                                # Skip directories
+                                if member.endswith('/'):
+                                    continue
+                                # Extract
+                                zf.extract(member, extract_dir)
+                                extracted_path = extract_dir / member
+                                if not extracted_path.is_file():
+                                    continue
+                                member_name = sanitize_filename(Path(member).name)
+                                member_size = extracted_path.stat().st_size
+                                member_category = categorize(member_name)
+                                member_id = str(uuid.uuid4())
+                                with files_lock:
+                                    member_rec = FileRecord(
+                                        id=member_id, name=member_name, size_bytes=member_size,
+                                        category=member_category, uploaded_at=time.time(),
+                                        saved_path=str(extracted_path),
+                                    )
+                                    files_registry.append(member_rec)
+                                saved.append(serialize_file(member_rec))
+                        print(f"[upload] Extracted {len(saved)} files from {safe_name}")
+                    except Exception as e:
+                        print(f"[upload] Failed to extract zip {safe_name}: {e}")
+                        traceback.print_exc()
+
+        with files_lock:
+            files = [serialize_file(f) for f in files_registry]
+        total = sum(f.size_bytes for f in files_registry)
+        return jsonify({"created": saved, "files": files, "totalFiles": len(files), "totalSizeBytes": total})
+    except Exception as e:
+        # Catch-all so the client gets a meaningful message instead of a bare
+        # 500. The full traceback goes to the .exe console window for debugging.
+        print(f"[upload] UNHANDLED ERROR: {e}")
+        traceback.print_exc()
+        return jsonify({"error": f"Upload failed: {e}", "type": type(e).__name__}), 500
 
 
 @app.route("/api/files", methods=["DELETE"])

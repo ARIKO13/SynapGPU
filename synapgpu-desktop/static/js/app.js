@@ -122,7 +122,14 @@ async function uploadFiles(fl) {
   try {
     const fd=new FormData(); files.forEach(f=>fd.append('files',f));
     const r=await fetch('/api/files',{method:'POST',body:fd});
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    if(!r.ok){
+      // Backend now returns JSON {error, detail?, type?} even on 500. Parse
+      // it so the toast shows the ACTUAL reason (e.g. "Cannot save file:
+      // [Errno 13] Permission denied") instead of a bare "HTTP 500".
+      let detail=`HTTP ${r.status}`;
+      try{ const ej=await r.json(); if(ej.error) detail=ej.error + (ej.detail?` (${ej.detail})`:''); }catch(_){}
+      throw new Error(detail);
+    }
     const d=await r.json(); state.files=d.files;
     const tb=d.created.reduce((a,f)=>a+f.sizeBytes,0);
     log(`Uploaded ${d.created.length} file${d.created.length>1?'s':''} (${humanSize(tb)}).`,'success');
