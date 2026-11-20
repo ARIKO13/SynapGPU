@@ -145,6 +145,37 @@ html, body {
 }
 .dz-primary { font-size: 12px; color: var(--text-2); }
 .dz-secondary { font-size: 10px; color: var(--text-4); margin-top: 2px; }
+/* Prominent Browse Files button — the PRIMARY upload method. Clicking it
+   opens the OS file picker. This always works regardless of whether
+   drag-and-drop cooperates with the user's OS/browser/security settings. */
+.browse-btn {
+  margin-top: 6px; padding: 5px 14px;
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent); border-radius: 4px;
+  cursor: pointer; transition: background 0.1s, transform 0.05s;
+}
+.browse-btn:hover { background: var(--accent); color: #0a0a0a; }
+.browse-btn:active { transform: scale(0.97); }
+/* Toast notifications — visible top-center feedback for upload success/error.
+   The in-app Console tab is easy to miss; toasts ensure the user sees upload
+   results immediately, especially errors when drag-drop silently fails. */
+#toast-host {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none; max-width: 90vw;
+}
+.toast {
+  padding: 10px 16px; border-radius: 6px; font-size: 12px; font-weight: 500;
+  opacity: 0; transform: translateY(-12px); transition: opacity 0.2s, transform 0.2s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: auto;
+  font-family: var(--mono); max-width: 460px; word-break: break-word;
+}
+.toast-visible { opacity: 1; transform: translateY(0); }
+.toast-success { background: #064e3b; color: #6ee7b7; border: 1px solid #10b981; }
+.toast-error { background: #4c0519; color: #fca5a5; border: 1px solid #ef4444; }
+.toast-info { background: #1e1e2e; color: #a1a1aa; border: 1px solid #3f3f46; }
+.toast-warn { background: #422006; color: #fcd34d; border: 1px solid #f59e0b; }
 .dz-categories { margin-top: 8px; }
 .dz-cat {
   display: flex; justify-content: space-between;

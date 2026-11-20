@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=076" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=077" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%2310b981'/></svg>" />
 </head>
 <body>
@@ -71,8 +71,9 @@
           </div>
           <div id="dropzone-model" class="dropzone" tabindex="0">
             <input id="file-input-model" type="file" multiple accept=".gguf,.bin,.safetensors,.pt,.pth,.onnx,.ggmf,.ckpt,.h5,.pb,.tflite,.modelfile" hidden />
-            <p class="dz-primary">Drop .gguf models</p>
-            <p class="dz-secondary">or click to browse</p>
+            <p class="dz-primary">Drop .gguf models here</p>
+            <p class="dz-secondary">or</p>
+            <button type="button" class="browse-btn">Browse Files</button>
           </div>
           <div id="model-list" class="file-list">
             <div class="empty-state"><p>No models yet</p></div>
@@ -87,8 +88,9 @@
           </div>
           <div id="dropzone-dataset" class="dropzone" tabindex="0">
             <input id="file-input-dataset" type="file" multiple accept=".json,.jsonl,.csv,.tsv,.parquet,.arrow,.feather,.txt,.zst,.zstd,.zip" hidden />
-            <p class="dz-primary">Drop datasets</p>
-            <p class="dz-secondary">.jsonl .csv .parquet .zst .zip</p>
+            <p class="dz-primary">Drop datasets here</p>
+            <p class="dz-secondary">.jsonl .csv .parquet .zst .zip · or</p>
+            <button type="button" class="browse-btn">Browse Files</button>
           </div>
           <div id="dataset-list" class="file-list">
             <div class="empty-state"><p>No datasets yet</p></div>
@@ -496,6 +498,6 @@
   </div>
 
   <script src="/static/js/socket.io.min.js"></script>
-  <script src="/static/js/app.js?v=076"></script>
+  <script src="/static/js/app.js?v=077"></script>
 </body>
 </html>

@@ -126,6 +126,7 @@ async function uploadFiles(fl) {
     const d=await r.json(); state.files=d.files;
     const tb=d.created.reduce((a,f)=>a+f.sizeBytes,0);
     log(`Uploaded ${d.created.length} file${d.created.length>1?'s':''} (${humanSize(tb)}).`,'success');
+    showToast(`Uploaded ${d.created.length} file${d.created.length>1?'s':''} (${humanSize(tb)})`, 'success');
     renderFiles(); renderRunState(); populateModelSelects();
     // Auto-fill: if a new .gguf model was uploaded, pre-select it in the Test tab dropdown
     // so the user can click Load immediately without re-selecting.
@@ -145,7 +146,33 @@ async function uploadFiles(fl) {
       const tds=$('#train-dataset-select'); if(tds && !tds.value) tds.value=newDs.id;
       updateTrainButton();
     }
-  } catch(e) { log(`Upload failed: ${e.message}`,'error'); }
+  } catch(e) {
+    log(`Upload failed: ${e.message}`,'error');
+    // Visible error toast — the in-app Console tab is easy to miss. Show the
+    // error front-and-center so the user knows the upload failed and why.
+    showToast(`Upload failed: ${e.message}. Try the Browse button instead.`, 'error');
+  }
+}
+// Visible toast notification — appears top-center, auto-dismisses after 4s.
+// Used for upload success/error so the user gets immediate feedback without
+// having to check the Console tab.
+function showToast(msg, type='info') {
+  let host=$('#toast-host');
+  if(!host){
+    host=document.createElement('div');
+    host.id='toast-host';
+    document.body.appendChild(host);
+  }
+  const t=document.createElement('div');
+  t.className=`toast toast-${type}`;
+  t.textContent=msg;
+  host.appendChild(t);
+  // Trigger the slide-in animation on next frame
+  requestAnimationFrame(()=>t.classList.add('toast-visible'));
+  setTimeout(()=>{
+    t.classList.remove('toast-visible');
+    setTimeout(()=>t.remove(), 300);
+  }, 4000);
 }
 async function deleteFile(id) { try { const r=await fetch(`/api/files?id=${id}`,{method:'DELETE'}); if(r.ok){state.files=state.files.filter(f=>f.id!==id); log('File deleted.','info'); renderFiles(); renderRunState(); populateModelSelects();} } catch(e){} }
 async function clearAllFiles() { for(const f of state.files){try{await fetch(`/api/files?id=${f.id}`,{method:'DELETE'});}catch(e){}} state.files=[]; log('All files cleared.','info'); renderFiles(); renderRunState(); populateModelSelects(); }
@@ -467,36 +494,45 @@ function renderBarChart(){const u=aggOverall();const svg=$('#bar-chart'),W=700,p
 function renderTestHistory(){const c=$('#test-history');if(!state.benchmarkResults.length){c.innerHTML='<div class="th-empty">No tests.</div>';return;}let h='';[...state.benchmarkResults].reverse().forEach(r=>{const t=new Date(r.ts).toLocaleTimeString('en-US',{hour12:false});const p=r.prompt.length>60?r.prompt.slice(0,60)+'…':r.prompt;h+=`<div class="th-row"><span class="th-time">${t}</span><span class="th-prompt"title="${escapeHtml(r.prompt)}">${escapeHtml(p)}</span><span class="th-score">${r.analysis.overall}/100</span></div>`;});c.innerHTML=h;}
 function switchTab(n){$$('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===n));$$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id===`tab-${n}`));}
 function wireDropzone(){
-  // Wire a sidebar section (Models or Datasets) to accept drops ANYWHERE
-  // inside it — not just on the small .dropzone div. The previous code only
-  // wired the dropzone div itself (~243×50px), so if the user dropped on the
-  // section header or the file list below, NOTHING happened (no upload, no
-  // file open). The user perceived this as "can't drop file in desktop".
+  // Match the web (Next.js/React) version EXACTLY. The web version's Dropzone
+  // works with a simple pattern: preventDefault on dragover/drop, upload on
+  // drop. NO stopPropagation, NO drag counter, NO fancy state.
   //
-  // Now the entire .sidebar-section (header + dropzone + file list) accepts
-  // drops. A drag counter handles nested dragenter/dragleave events (which
-  // fire once per child element) so the visual feedback stays on while the
-  // pointer is anywhere inside the section, and turns off only when it truly
-  // leaves.
+  // The previous desktop code used stopPropagation() + a drag counter + global
+  // window drop handlers. That over-engineering interfered with REAL (non-
+  // synthetic) drag events from the OS — synthetic DragEvents dispatched in
+  // tests bypass the browser's drag pipeline, so they worked, but real drags
+  // from Windows Explorer did not. Simplifying to match the web version fixes
+  // the real drag-drop path.
   function wireSection(dzId, inpId){
     const dz=$(dzId), inp=$(inpId);
     if(!dz||!inp) return;
     const section=dz.closest('.sidebar-section')||dz;
+    // Click the dropzone OR the Browse button → open OS file picker.
     dz.addEventListener('click',()=>inp.click());
+    const browseBtn=section.querySelector('.browse-btn');
+    if(browseBtn) browseBtn.addEventListener('click',e=>{e.stopPropagation();inp.click();});
     dz.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inp.click();}});
     inp.addEventListener('change',()=>{if(inp.files.length)uploadFiles(inp.files);inp.value='';});
-    let dragCounter=0;
-    section.addEventListener('dragenter',e=>{e.preventDefault();e.stopPropagation();dragCounter++;section.classList.add('section-drag-over');});
-    section.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();section.classList.add('section-drag-over');});
-    section.addEventListener('dragleave',e=>{e.preventDefault();e.stopPropagation();dragCounter--;if(dragCounter<=0){dragCounter=0;section.classList.remove('section-drag-over');}});
-    section.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();dragCounter=0;section.classList.remove('section-drag-over');if(e.dataTransfer.files?.length)uploadFiles(e.dataTransfer.files);});
+    // Drag-drop — identical to web version: preventDefault + visual state.
+    // NO stopPropagation (it was breaking real drags), NO drag counter.
+    section.addEventListener('dragover',e=>{e.preventDefault();section.classList.add('section-drag-over');});
+    section.addEventListener('dragleave',e=>{e.preventDefault();section.classList.remove('section-drag-over');});
+    section.addEventListener('drop',e=>{
+      e.preventDefault();
+      section.classList.remove('section-drag-over');
+      const files=e.dataTransfer&&e.dataTransfer.files;
+      if(files&&files.length){ uploadFiles(files); }
+      else { log('Drop registered but no files in payload. Try clicking Browse instead.','warn'); }
+    });
   }
   wireSection('#dropzone-model','#file-input-model');
   wireSection('#dropzone-dataset','#file-input-dataset');
-  // Global drag/drop prevention — dropping OUTSIDE any section must not
-  // navigate the browser to the file (the default OS behavior).
+  // Prevent the browser from navigating to the file when dropped OUTSIDE any
+  // section (default OS behavior). This runs AFTER section handlers (during
+  // the bubble phase) and is harmless if preventDefault was already called.
   window.addEventListener('dragover',e=>e.preventDefault());
-  window.addEventListener('drop',e=>{e.preventDefault();});
+  window.addEventListener('drop',e=>e.preventDefault());
 }
 
 async function init(){
