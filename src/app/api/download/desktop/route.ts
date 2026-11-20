@@ -67,13 +67,10 @@ async function walk(dir: string, base: string, out: FileEntry[] = []): Promise<F
       await walk(absPath, base, out)
     } else if (stat.isFile()) {
       out.push({
-        // Prefix with synapgpu-desktop/ so the zip has a top-level wrapper
-        // folder. Without this, extracting scatters app.py, RUN.bat, static/,
-        // etc. directly into the user's extract directory. With the wrapper,
-        // extraction produces a single synapgpu-desktop/ folder containing
-        // everything — cleaner UX, matches what users expect from a release
-        // archive.
-        archivePath: 'synapgpu-desktop/' + relPath.split(path.sep).join('/'),
+        // Flat layout (no top-level wrapper folder) — archive root contains
+        // README-LATEST.md + RUN.bat + app.py + static\ directly. Matches
+        // the Windows .exe zip layout (SynapGPU.exe + _internal\ at root).
+        archivePath: relPath.split(path.sep).join('/'),
         absPath,
       })
     }
@@ -243,13 +240,10 @@ Produces dist/SynapGPU/SynapGPU.exe — distribute the entire dist/SynapGPU/
 folder to end users who don't want to install Python.
 
 ## Files included
-${files
-  .map((f) => f.archivePath.replace(/^synapgpu-desktop\//, ''))
-  .map((p) => `- ${p}`)
-  .join('\n')}
+${files.map((f) => `- ${f.archivePath}`).join('\n')}
 `
     files.unshift({
-      archivePath: 'synapgpu-desktop/README-LATEST.md',
+      archivePath: 'README-LATEST.md',
       absPath: '', // marker — we'll substitute the readme content
     })
 
@@ -259,7 +253,7 @@ ${files
 
     // Add README first.
     const readmeBytes = new TextEncoder().encode(readme)
-    const readmeZip = zipFile('synapgpu-desktop/README-LATEST.md', readmeBytes)
+    const readmeZip = zipFile('README-LATEST.md', readmeBytes)
     centralRecords.push({ header: readmeZip.centralHeader, offset: localOffset })
     zipped.push(readmeZip)
     localOffset += readmeZip.localChunk.length
