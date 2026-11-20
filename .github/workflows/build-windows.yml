@@ -86,7 +86,11 @@ jobs:
         run: |
           $tag = "${{ steps.tag.outputs.name }}"
           $zipPath = "SynapGPU-Windows-$tag.zip"
-          Compress-Archive -Path "synapgpu-desktop\dist\SynapGPU\*" -DestinationPath $zipPath
+          # Zip the SynapGPU folder itself (not its contents with \*) so the
+          # archive has a top-level SynapGPU\ wrapper. When users extract,
+          # they get a single SynapGPU\ folder containing SynapGPU.exe +
+          # _internal\ — instead of files scattering into their extract dir.
+          Compress-Archive -Path "synapgpu-desktop\dist\SynapGPU" -DestinationPath $zipPath
           $size = (Get-Item $zipPath).Length
           Write-Host "Created $zipPath ($([math]::Round($size/1MB, 2)) MB)"
 
