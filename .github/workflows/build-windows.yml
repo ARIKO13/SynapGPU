@@ -39,10 +39,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # For workflow_dispatch, github.ref is the default branch — we need
-          # to override with the tag the user typed in. For tag-push triggers,
-          # github.ref IS the tag, so the input is empty and we fall back.
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          # For tag-push triggers, github.ref IS the tag (e.g. refs/tags/v0.9.1)
+          # and we want to build exactly the code that was tagged.
+          #
+          # For workflow_dispatch (manual back-fill of an OLDER release tag,
+          # e.g. re-building v0.9.0 after a bug fix), we MUST check out the
+          # default branch (main) — NOT the tag. The tag still points at the
+          # commit it was originally created at (before the fix), so checking
+          # it out would build the OLD buggy source. The `tag` input is only
+          # used to decide which RELEASE to attach the asset to, not which
+          # commit to build from.
+          ref: ${{ github.event_name == 'push' && github.ref || github.event.repository.default_branch }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
