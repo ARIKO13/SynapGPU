@@ -1928,3 +1928,56 @@ html, body {
   border: 2px solid var(--bg);
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ============================================================
+   Resizable split: workspace (top) + chat dock (bottom)
+   Drag the divider up/down to resize both panels — like a
+   window split. Double-click resets. Arrow keys when focused.
+   ============================================================ */
+.split-handle {
+  position: relative;
+  flex: none;
+  height: 8px;
+  cursor: row-resize;
+  background: var(--bg-elev-1);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  transition: background 0.15s ease;
+}
+.split-handle:hover, .split-handle:focus-visible, .split-handle.dragging { background: var(--bg-hover); }
+.split-handle:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.split-grip {
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  transition: background 0.15s ease, width 0.15s ease;
+}
+.split-handle:hover .split-grip, .split-handle:focus-visible .split-grip, .split-handle.dragging .split-grip { background: var(--accent); width: 46px; }
+.chat-dock {
+  flex: none;
+  height: 240px;
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+}
+.chat-dock .chat-header { flex: none; }
+.chat-dock .chat-messages { flex: 1; min-height: 0; }
+.chat-dock .chat-input-bar { flex: none; }
+.chat-dock .chat-error { flex: none; }
+.chat-hint {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+body.dock-dragging { user-select: none; -webkit-user-select: none; cursor: row-resize; }
+@media (max-width: 1023px) { .chat-dock { height: 200px; } }
+@media (max-width: 640px) { .chat-hint { display: none; } }

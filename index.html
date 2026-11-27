@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=20261127a" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%2310b981'/></svg>" />
 </head>
 <body>
@@ -278,9 +278,8 @@
             <div class="ch-left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               <span>LLM Test (WebGPU)</span>
-              <span id="chat-model-badge" class="chat-model-badge hidden">—</span>
             </div>
-            <button id="clear-chat-btn" class="btn-ghost">Clear</button>
+            <span class="chat-hint">Load model di sini — chat ada di panel bawah · geser pembatas untuk atur tinggi</span>
           </div>
 
           <!-- LLM model loader -->
@@ -345,21 +344,6 @@
             </div>
           </div>
 
-          <div id="chat-messages" class="chat-messages">
-            <div class="chat-empty">
-              <p id="ce-sub" class="ce-sub">Pick a preset model or upload your own .gguf file, then click Load to run an LLM directly in your browser via WebGPU.</p>
-            </div>
-          </div>
-          <div id="chat-error" class="chat-error hidden"></div>
-          <div class="chat-input-bar">
-            <textarea id="chat-input" placeholder="Load a model first to chat…" rows="2" disabled></textarea>
-            <button id="chat-send-btn" class="btn btn-primary btn-icon" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            </button>
-            <button id="chat-stop-btn" class="btn btn-danger btn-icon hidden">
-              <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"></rect></svg>
-            </button>
-          </div>
           <p class="chat-footer-note">Runs entirely in your browser — LLM inference via WebGPU or WebAssembly. No backend, no API key. Model cached for next visit.</p>
         </section>
 
@@ -418,6 +402,42 @@
       </main>
     </div>
 
+    <!-- Resizable split between the top workspace and the bottom chat dock.
+         Drag the handle to change both panels' height (like window split).
+         Double-click resets to the default height. -->
+    <div id="split-handle" class="split-handle" role="separator" aria-orientation="horizontal" tabindex="0"
+         aria-label="Chat panel height divider — drag, or use ArrowUp/ArrowDown, double-click to reset"
+         title="Drag to resize panels · double-click to reset">
+      <div class="split-grip"></div>
+    </div>
+
+    <!-- Bottom chat dock — visible on every tab (split window style) -->
+    <section id="chat-dock" class="chat-dock" aria-label="Chat panel">
+      <div class="chat-header">
+        <div class="ch-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Chat</span>
+          <span id="chat-model-badge" class="chat-model-badge hidden">—</span>
+        </div>
+        <button id="clear-chat-btn" class="btn-ghost">Clear</button>
+      </div>
+      <div id="chat-messages" class="chat-messages">
+        <div class="chat-empty">
+          <p id="ce-sub" class="ce-sub">Pick a preset model or upload your own .gguf file, then click Load to run an LLM directly in your browser via WebGPU.</p>
+        </div>
+      </div>
+      <div id="chat-error" class="chat-error hidden"></div>
+      <div class="chat-input-bar">
+        <textarea id="chat-input" placeholder="Load a model first to chat…" rows="2" disabled></textarea>
+        <button id="chat-send-btn" class="btn btn-primary btn-icon" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+        <button id="chat-stop-btn" class="btn btn-danger btn-icon hidden">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"></rect></svg>
+        </button>
+      </div>
+    </section>
+
     <footer class="footer">
       <div class="footer-left">
         <span id="footer-conn" class="footer-item"><span class="indicator-dot"></span> offline</span>
@@ -434,6 +454,6 @@
     </footer>
   </div>
 
-  <script src="js/app.js?v=20260930L"></script>
+  <script src="js/app.js?v=20261127a"></script>
 </body>
 </html>

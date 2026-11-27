@@ -1961,6 +1961,57 @@ async function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
+/* ── Resizable split: workspace (top) ↔ chat dock (bottom) ───────────────
+ * Drag the divider up/down to resize both panels (like a window split).
+ * Position persists in localStorage; double-click resets to default.
+ * The handle is keyboard-operable too (ArrowUp/ArrowDown, Home/End). */
+function initSplitDock() {
+  const handle = $('#split-handle'), dock = $('#chat-dock'), body = $('.body');
+  if (!handle || !dock || !body) return;
+  const KEY = 'synapgpu_dock_h', DEF = 240, MIN = 88;
+  const saved = parseInt(localStorage.getItem(KEY) || '', 10);
+  let h = Number.isFinite(saved) && saved > 0 ? saved : DEF;
+  const maxH = () => Math.max(MIN + 80, Math.round(body.getBoundingClientRect().height - 120));
+  const apply = () => {
+    h = Math.min(Math.max(h, MIN), maxH());
+    dock.style.height = h + 'px';
+    handle.setAttribute('aria-valuenow', String(Math.round(h)));
+    handle.setAttribute('aria-valuemax', String(Math.round(maxH())));
+  };
+  apply();
+  window.addEventListener('resize', apply);
+  let sy = 0, sh = 0, dragging = false;
+  handle.addEventListener('pointerdown', (e) => {
+    dragging = true; sy = e.clientY; sh = dock.getBoundingClientRect().height;
+    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+    handle.classList.add('dragging'); document.body.classList.add('dock-dragging');
+    e.preventDefault();
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    h = sh + (sy - e.clientY);
+    apply();
+  });
+  const finish = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+    handle.classList.remove('dragging'); document.body.classList.remove('dock-dragging');
+    try { localStorage.setItem(KEY, String(Math.round(h))); } catch (_) {}
+  };
+  handle.addEventListener('pointerup', finish);
+  handle.addEventListener('pointercancel', finish);
+  handle.addEventListener('dblclick', () => { try { localStorage.removeItem(KEY); } catch (_) {} h = DEF; apply(); });
+  handle.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 60 : 24;
+    if (e.key === 'ArrowUp') { h -= step; apply(); e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { h += step; apply(); e.preventDefault(); }
+    else if (e.key === 'Home') { h = MIN; apply(); e.preventDefault(); }
+    else if (e.key === 'End') { h = maxH(); apply(); e.preventDefault(); }
+  });
+}
+document.addEventListener('DOMContentLoaded', initSplitDock);
+
 // Verify file is valid GGUF before loading
 async function verifyGguf(file) {
   if (!file) return false;
