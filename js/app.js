@@ -657,7 +657,7 @@ function renderCustomFileList() {
   if (!container) return;
   const llmFiles = state.files.filter((f) => f.category === 'llm');
   if (llmFiles.length === 0) {
-    container.innerHTML = '<div class="custom-file-empty">No .gguf files uploaded. Drop a .gguf file in the sidebar to load it here.</div>';
+    container.innerHTML = '<div class="custom-file-empty">No model files uploaded. Drop a file in the sidebar (.gguf, .safetensors, .pt/.pth, .bin, .onnx) — browser chat runs .gguf via wllama; other formats are kept for upload/benchmark only.</div>';
     return;
   }
   let html = '';
@@ -712,9 +712,9 @@ async function loadCustomGguf(file) {
 
   if (!file) return;
   if (!file.name.match(/\.(gguf|bin)$/i)) {
-    $('#chat-error').textContent = 'Please select a .gguf or .bin model file.';
+    $('#chat-error').textContent = 'Browser chat (wllama) hanya bisa menjalankan .gguf — file ' + file.name + ' diupload & tersimpan, tapi untuk chat konversi dulu ke GGUF (mis. convert_hf_to_gguf.py).';
     $('#chat-error').classList.remove('hidden');
-    log('Invalid file type: ' + file.name, 'error');
+    log('Non-GGUF model selected for chat: ' + file.name + ' (stored, not runnable in browser)', 'warn');
     return;
   }
 
