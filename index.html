@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20261127a" />
+  <link rel="stylesheet" href="css/styles.css?v=20261127b" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%2310b981'/></svg>" />
 </head>
 <body>
@@ -279,7 +279,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               <span>LLM Test (WebGPU)</span>
             </div>
-            <span class="chat-hint">Load model di sini — chat ada di panel bawah · geser pembatas untuk atur tinggi</span>
+            <span class="chat-hint">Load model di sini — chat buka lewat tombol 💬 di pojok kanan bawah</span>
           </div>
 
           <!-- LLM model loader -->
@@ -402,24 +402,24 @@
       </main>
     </div>
 
-    <!-- Resizable split between the top workspace and the bottom chat dock.
-         Drag the handle to change both panels' height (like window split).
-         Double-click resets to the default height. -->
-    <div id="split-handle" class="split-handle" role="separator" aria-orientation="horizontal" tabindex="0"
-         aria-label="Chat panel height divider — drag, or use ArrowUp/ArrowDown, double-click to reset"
-         title="Drag to resize panels · double-click to reset">
-      <div class="split-grip"></div>
-    </div>
+    <!-- Floating chat widget — chat icon button in the corner; click opens a
+         small popup that can be dragged anywhere (hold its header). -->
+    <button id="chat-fab" class="chat-fab" aria-label="Buka chat" aria-expanded="false" title="Chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span id="chat-fab-dot" class="chat-fab-dot hidden"></span>
+    </button>
 
-    <!-- Bottom chat dock — visible on every tab (split window style) -->
-    <section id="chat-dock" class="chat-dock" aria-label="Chat panel">
-      <div class="chat-header">
+    <section id="chat-widget" class="chat-widget hidden" role="dialog" aria-label="Chat">
+      <div id="chat-widget-head" class="chat-widget-head" title="Hold &amp; drag to move">
         <div class="ch-left">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           <span>Chat</span>
           <span id="chat-model-badge" class="chat-model-badge hidden">—</span>
         </div>
-        <button id="clear-chat-btn" class="btn-ghost">Clear</button>
+        <div class="chw-actions">
+          <button id="clear-chat-btn" class="btn-ghost">Clear</button>
+          <button id="chat-widget-close" class="chat-widget-x" title="Close">✕</button>
+        </div>
       </div>
       <div id="chat-messages" class="chat-messages">
         <div class="chat-empty">
@@ -454,6 +454,6 @@
     </footer>
   </div>
 
-  <script src="js/app.js?v=20261127a"></script>
+  <script src="js/app.js?v=20261127b"></script>
 </body>
 </html>

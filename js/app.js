@@ -1961,56 +1961,81 @@ async function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
-/* ── Resizable split: workspace (top) ↔ chat dock (bottom) ───────────────
- * Drag the divider up/down to resize both panels (like a window split).
- * Position persists in localStorage; double-click resets to default.
- * The handle is keyboard-operable too (ArrowUp/ArrowDown, Home/End). */
-function initSplitDock() {
-  const handle = $('#split-handle'), dock = $('#chat-dock'), body = $('.body');
-  if (!handle || !dock || !body) return;
-  const KEY = 'synapgpu_dock_h', DEF = 240, MIN = 88;
-  const saved = parseInt(localStorage.getItem(KEY) || '', 10);
-  let h = Number.isFinite(saved) && saved > 0 ? saved : DEF;
-  const maxH = () => Math.max(MIN + 80, Math.round(body.getBoundingClientRect().height - 120));
-  const apply = () => {
-    h = Math.min(Math.max(h, MIN), maxH());
-    dock.style.height = h + 'px';
-    handle.setAttribute('aria-valuenow', String(Math.round(h)));
-    handle.setAttribute('aria-valuemax', String(Math.round(maxH())));
+/* ── Floating chat widget ──────────────────────────────────────────────────
+ * Chat icon (FAB) in the bottom-right corner → click toggles a small popup.
+ * The popup can be dragged anywhere: hold its header (pointer/touch).
+ * Position persists in localStorage; popup is always kept on screen. */
+function initChatWidget() {
+  const fab = $('#chat-fab'), w = $('#chat-widget'), head = $('#chat-widget-head'), closeBtn = $('#chat-widget-close'), dot = $('#chat-fab-dot');
+  if (!fab || !w || !head) return;
+  const KEY = 'synapgpu_chat_pos', M = 8;
+  const W = () => w.getBoundingClientRect().width || 340, H = () => w.getBoundingClientRect().height || 440;
+  const clamp = (x, y) => [Math.min(Math.max(x, M), Math.max(M, innerWidth - W() - M)), Math.min(Math.max(y, M), Math.max(M, innerHeight - H() - M))];
+  const place = (x, y, save) => {
+    const p = clamp(x, y);
+    w.style.left = p[0] + 'px'; w.style.top = p[1] + 'px';
+    w.style.right = 'auto'; w.style.bottom = 'auto';
+    if (save) { try { localStorage.setItem(KEY, JSON.stringify({ x: Math.round(p[0]), y: Math.round(p[1]) })); } catch (_) {} }
   };
-  apply();
-  window.addEventListener('resize', apply);
-  let sy = 0, sh = 0, dragging = false;
-  handle.addEventListener('pointerdown', (e) => {
-    dragging = true; sy = e.clientY; sh = dock.getBoundingClientRect().height;
-    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
-    handle.classList.add('dragging'); document.body.classList.add('dock-dragging');
+  const isOpen = () => !w.classList.contains('hidden');
+  const open = (v) => {
+    w.classList.toggle('hidden', !v);
+    fab.setAttribute('aria-expanded', String(v));
+    if (v) {
+      if (dot) dot.classList.add('hidden');
+      let pos = null;
+      try { pos = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
+      if (pos) { place(pos.x, pos.y, false); }
+      else { const r = fab.getBoundingClientRect(); place(r.left - (W() - r.width), r.top - H() - 10, false); }
+      const inp = $('#chat-input'); if (inp) inp.focus();
+    }
+  };
+  fab.addEventListener('click', () => open(!isOpen()));
+  if (closeBtn) closeBtn.addEventListener('click', () => open(false));
+  /* Drag popup: pointerdown on the header (buttons in header are excluded) */
+  let sx = 0, sy = 0, ox = 0, oy = 0, drag = false, moved = false;
+  head.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button,input,a,textarea,select')) return;
+    drag = true; moved = false; sx = e.clientX; sy = e.clientY;
+    const r = w.getBoundingClientRect(); ox = r.left; oy = r.top;
+    try { head.setPointerCapture(e.pointerId); } catch (_) {}
+    document.body.classList.add('chat-dragging');
     e.preventDefault();
   });
-  handle.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    h = sh + (sy - e.clientY);
-    apply();
+  head.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 3) moved = true;
+    place(ox + (e.clientX - sx), oy + (e.clientY - sy), false);
   });
   const finish = (e) => {
-    if (!dragging) return;
-    dragging = false;
-    try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
-    handle.classList.remove('dragging'); document.body.classList.remove('dock-dragging');
-    try { localStorage.setItem(KEY, String(Math.round(h))); } catch (_) {}
+    if (!drag) return;
+    drag = false;
+    try { head.releasePointerCapture(e.pointerId); } catch (_) {}
+    document.body.classList.remove('chat-dragging');
+    if (moved) { const r = w.getBoundingClientRect(); place(r.left, r.top, true); }
   };
-  handle.addEventListener('pointerup', finish);
-  handle.addEventListener('pointercancel', finish);
-  handle.addEventListener('dblclick', () => { try { localStorage.removeItem(KEY); } catch (_) {} h = DEF; apply(); });
-  handle.addEventListener('keydown', (e) => {
-    const step = e.shiftKey ? 60 : 24;
-    if (e.key === 'ArrowUp') { h -= step; apply(); e.preventDefault(); }
-    else if (e.key === 'ArrowDown') { h += step; apply(); e.preventDefault(); }
-    else if (e.key === 'Home') { h = MIN; apply(); e.preventDefault(); }
-    else if (e.key === 'End') { h = maxH(); apply(); e.preventDefault(); }
+  head.addEventListener('pointerup', finish);
+  head.addEventListener('pointercancel', finish);
+  /* Red "unread" dot when a new message arrives while the popup is closed.
+     Observer is armed 3s after load so the initial render is not counted. */
+  const msgs = $('#chat-messages');
+  if (msgs && dot && 'MutationObserver' in window) {
+    setTimeout(() => {
+      new MutationObserver(() => { if (!isOpen()) dot.classList.remove('hidden'); })
+        .observe(msgs, { childList: true, subtree: true, characterData: true });
+    }, 3000);
+  }
+  window.addEventListener('resize', () => {
+    if (isOpen()) { const r = w.getBoundingClientRect(); place(r.left, r.top, false); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isOpen()) {
+      const a = document.activeElement;
+      if (!(a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT'))) open(false);
+    }
   });
 }
-document.addEventListener('DOMContentLoaded', initSplitDock);
+document.addEventListener('DOMContentLoaded', initChatWidget);
 
 // Verify file is valid GGUF before loading
 async function verifyGguf(file) {
