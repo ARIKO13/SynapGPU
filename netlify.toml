@@ -1,0 +1,36 @@
+# Netlify config untuk situs SynapGPU (deploy via CLI/API, tanpa build step)
+
+[build]
+  publish = "."
+
+# Installer: selalu validasi ulang (file ganti tiap versi)
+[[headers]]
+  for = "/downloads/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    X-Content-Type-Options = "nosniff"
+
+# Aset statis (css/js/img): cache agresif, nama file membawa version query
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/app/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Keamanan dasar untuk semua halaman
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Redirect rapi: /app/ tanpa trailing slash tetap jalan
+[[redirects]]
+  from = "/app"
+  to = "/app/"
+  status = 301
