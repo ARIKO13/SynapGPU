@@ -1,5 +1,5 @@
 /* ============================================================
-   SynapGPU — Professional UI
+   SynapGPU, Professional UI
    Dark, minimal, refined. Silver accent on neutral base
    (mengikuti logo monokrom).
    ============================================================ */
@@ -25,7 +25,7 @@
   --text-faint:   #52525b;
   --text-trace:   #3f3f46;
 
-  /* Single accent — silver (dari logo monokrom) */
+  /* Single accent, silver (dari logo monokrom) */
   --accent:        #c9cfd3;
   --accent-hover:  #e8ebec;
   --accent-soft:   rgba(222, 228, 231, 0.07);
@@ -730,7 +730,7 @@ html, body {
 .di-value.muted { color: var(--text-faint); }
 .di-value.accent { color: var(--accent-text); }
 
-/* GPU source toggle — let user pick between WebGPU (Chrome adapter) and
+/* GPU source toggle, let user pick between WebGPU (Chrome adapter) and
    WebGL (real device hardware) as the GPU info source. */
 .gpu-source-toggle {
   display: flex;
@@ -1639,7 +1639,7 @@ html, body {
 .verdict-detail .neg { color: #fb7185; font-weight: 500; }
 .verdict-detail .neutral { color: var(--warn); font-weight: 500; }
 
-/* Full benchmark report — 3 sections: Setara / Mengalahkan / Kalah dari */
+/* Full benchmark report, 3 sections: Setara / Mengalahkan / Kalah dari */
 .verdict-report {
   display: flex;
   flex-direction: column;
