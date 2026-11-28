@@ -1,4 +1,4 @@
-/* SynapGPU landing — slideshow + nav mobile. Vanilla, tanpa dependensi. */
+/* SynapGPU landing: slideshow + nav mobile. Vanilla, tanpa dependensi. */
 (function () {
   'use strict';
 

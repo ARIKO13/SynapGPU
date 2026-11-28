@@ -1,4 +1,4 @@
-/* SynapGPU — Live device profiler (GitHub Pages build)
+/* SynapGPU, Live device profiler (GitHub Pages build)
  *
  * Reads REAL specs from the browser's host device via Web APIs:
  *   - GPU via navigator.gpu.requestAdapter().requestAdapterInfo()
@@ -42,7 +42,7 @@ const state = {
   uptimeTimer: null,
   benchmarkResults: [],
   radarCompareKey: 'gpt4',
-  // Real device info — detected on load
+  // Real device info, detected on load
   deviceInfo: null,
   // CPU benchmark state (for live utilization estimate)
   cpuBenchmarkResult: 0,
@@ -87,7 +87,7 @@ function log(text, level = 'info') {
 }
 
 // ===========================================================================
-// REAL DEVICE DETECTION — this is the core of the public web app.
+// REAL DEVICE DETECTION, this is the core of the public web app.
 // Each visitor's device gets profiled via standard Web APIs.
 // ===========================================================================
 
@@ -95,7 +95,7 @@ function log(text, level = 'info') {
  * Detect GPU via WebGPU API. Returns adapter info if WebGPU is supported,
  * else null.
  *
- * On the public web version (GitHub Pages) we only use WebGPU — it's the
+ * On the public web version (GitHub Pages) we only use WebGPU, it's the
  * modern browser API for GPU compute, and the user explicitly asked for
  * Chrome WebGPU here. For real device hardware specs (CPU model, RAM total,
  * GPU model via WebGL UNMASKED_RENDERER), users should download the desktop
@@ -146,7 +146,7 @@ async function detectGPU() {
 function detectCPU() {
   const cores = navigator.hardwareConcurrency || 0;
 
-  // High-entropy values (UA Client Hints API) — Chromium-based browsers
+  // High-entropy values (UA Client Hints API), Chromium-based browsers
   let arch = 'Unknown';
   let platform = 'Unknown';
   let bitness = '';
@@ -236,14 +236,14 @@ async function detectStorage() {
   }
   try {
     const est = await navigator.storage.estimate();
-    // quota is usually a fraction (10%–60%) of free disk space, but it gives
+    // quota is usually a fraction (10%-60%) of free disk space, but it gives
     // us a hint about available storage. Real total disk is not exposed.
     return {
       quota: est.quota,        // bytes available to this origin
       usage: est.usage,        // bytes used by this origin
       quotaGb: est.quota ? est.quota / (1024 ** 3) : 0,
       usageGb: est.usage ? est.usage / (1024 ** 3) : 0,
-      // Free space estimate (browser's storage bucket — not real disk)
+      // Free space estimate (browser's storage bucket, not real disk)
       freeGb: est.quota && est.usage ? (est.quota - est.usage) / (1024 ** 3) : 0,
     };
   } catch (e) {
@@ -293,7 +293,7 @@ async function detectBattery() {
 }
 
 /**
- * Master device info — calls all detectors and assembles the result.
+ * Master device info, calls all detectors and assembles the result.
  * Uses Promise.allSettled so a failure in one detector (e.g. Battery API
  * not supported) doesn't break the others.
  *
@@ -363,7 +363,7 @@ function detectBrowser() {
 }
 
 // ===========================================================================
-// CPU LOAD ESTIMATE — synthetic benchmark (10ms every 2s)
+// CPU LOAD ESTIMATE, synthetic benchmark (10ms every 2s)
 // ===========================================================================
 
 /**
@@ -406,7 +406,7 @@ setInterval(() => {
 }, 2000);
 
 // ===========================================================================
-// Live metrics broadcast — simulated telemetry built on real device specs
+// Live metrics broadcast, simulated telemetry built on real device specs
 // ===========================================================================
 
 const sim = {
@@ -430,13 +430,13 @@ function generateMetrics() {
     ? Math.min(100, state.cpuBenchmarkLoad + (state.runState === 'running' ? 40 : 0))
     : Math.random() * 3;
 
-  // RAM used — we know total from deviceInfo, but used is browser-restricted.
+  // RAM used, we know total from deviceInfo, but used is browser-restricted.
   // We can use performance.memory (Chrome-only) if available; otherwise simulate.
   let ramUsed;
   if (performance.memory) {
     ramUsed = performance.memory.usedJSHeapSize / (1024 ** 3);
   } else if (state.deviceInfo && state.deviceInfo.ram.totalGb) {
-    // Simulate based on run state — no real per-process memory available.
+    // Simulate based on run state, no real per-process memory available.
     let target = state.deviceInfo.ram.totalGb * 0.3;
     if (state.runState === 'loading') target = state.deviceInfo.ram.totalGb * 0.5;
     if (state.runState === 'running') target = state.deviceInfo.ram.totalGb * 0.65;
@@ -446,7 +446,7 @@ function generateMetrics() {
   }
   sim.ramUsed = ramUsed;
 
-  // SSD throughput — simulate (browser can't measure disk I/O)
+  // SSD throughput, simulate (browser can't measure disk I/O)
   let ssdReadTarget, ssdWriteTarget;
   if (state.runState === 'loading') {
     ssdReadTarget = 850; ssdWriteTarget = 30;
@@ -459,7 +459,7 @@ function generateMetrics() {
   sim.ssdRead = Math.max(0, drift(sim.ssdRead, ssdReadTarget, 60));
   sim.ssdWrite = Math.max(0, drift(sim.ssdWrite, ssdWriteTarget, 25));
 
-  // Network — use REAL Network Information API if available
+  // Network, use REAL Network Information API if available
   let netRx, netTx;
   if (state.deviceInfo && state.deviceInfo.network && !state.deviceInfo.network.unavailable) {
     netRx = state.deviceInfo.network.downlink || 0;
@@ -519,7 +519,7 @@ setInterval(async () => {
 }, 10000);
 
 // ===========================================================================
-// "Connection" — in this build we don't need a backend, so we just simulate
+// "Connection", in this build we don't need a backend, so we just simulate
 // the connect/disconnect handshake locally.
 // ===========================================================================
 function connectSocket() {
@@ -542,7 +542,7 @@ function connectSocket() {
 }
 
 // ===========================================================================
-// File management (in-browser only — kept in memory, not persisted)
+// File management (in-browser only, kept in memory, not persisted)
 // ===========================================================================
 function uploadFiles(fileList) {
   const files = Array.from(fileList);
@@ -626,7 +626,7 @@ function handleStop() {
 }
 
 // ===========================================================================
-// Chat — REAL LLM inference via WebGPU (using web-llm library from MLC AI)
+// Chat, REAL LLM inference via WebGPU (using web-llm library from MLC AI)
 // ===========================================================================
 // The model runs entirely in the browser using WebGPU compute shaders.
 // First load downloads the model (~250MB-1GB depending on size), then
@@ -657,7 +657,7 @@ function renderCustomFileList() {
   if (!container) return;
   const llmFiles = state.files.filter((f) => f.category === 'llm');
   if (llmFiles.length === 0) {
-    container.innerHTML = '<div class="custom-file-empty">No model files uploaded. Drop a file in the sidebar (.gguf, .safetensors, .pt/.pth, .bin, .onnx) — browser chat runs .gguf via wllama; other formats are kept for upload/benchmark only.</div>';
+    container.innerHTML = '<div class="custom-file-empty">No model files uploaded. Drop a file in the sidebar (.gguf, .safetensors, .pt/.pth, .bin, .onnx), browser chat runs .gguf via wllama; other formats are kept for upload/benchmark only.</div>';
     return;
   }
   let html = '';
@@ -669,7 +669,7 @@ function renderCustomFileList() {
     if (f.sizeBytes <= 500000000) { sizeTag = 'Fast'; sizeTagClass = 'ok'; }
     else if (f.sizeBytes <= 1000000000) { sizeTag = 'Slow'; sizeTagClass = 'warn'; }
     else if (f.sizeBytes <= 2000000000) { sizeTag = 'May crash'; sizeTagClass = 'warn'; }
-    else { sizeTag = 'Too large — use Desktop'; sizeTagClass = 'bad'; }
+    else { sizeTag = 'Too large, use Desktop'; sizeTagClass = 'bad'; }
 
     const loadDisabled = f.sizeBytes > 2000000000;
 
@@ -698,7 +698,7 @@ function renderCustomFileList() {
       } else {
         $('#chat-error').textContent = 'File not available. Please re-upload the .gguf file via the sidebar dropzone.';
         $('#chat-error').classList.remove('hidden');
-        log('File ' + file.name + ' is a placeholder — re-upload to load.', 'warn');
+        log('File ' + file.name + ' is a placeholder, re-upload to load.', 'warn');
       }
     });
   });
@@ -712,7 +712,7 @@ async function loadCustomGguf(file) {
 
   if (!file) return;
   if (!file.name.match(/\.(gguf|bin)$/i)) {
-    $('#chat-error').textContent = 'Browser chat (wllama) hanya bisa menjalankan .gguf — file ' + file.name + ' diupload & tersimpan, tapi untuk chat konversi dulu ke GGUF (mis. convert_hf_to_gguf.py).';
+    $('#chat-error').textContent = 'Browser chat (wllama) hanya bisa menjalankan .gguf, file ' + file.name + ' diupload & tersimpan, tapi untuk chat konversi dulu ke GGUF (mis. convert_hf_to_gguf.py).';
     $('#chat-error').classList.remove('hidden');
     log('Non-GGUF model selected for chat: ' + file.name + ' (stored, not runnable in browser)', 'warn');
     return;
@@ -775,7 +775,7 @@ async function loadCustomGguf(file) {
     // wllama v3: pass clean Blob (not File) to avoid worker transfer issues
     const ctxSize = file.size > 1000000000 ? 512 : 2048;
     if (file.size > 1000000000) {
-      log('Large model — using context size 512.', 'warn');
+      log('Large model, using context size 512.', 'warn');
     }
     await wllamaInstance.loadModel([cleanBlob], {
       n_ctx: ctxSize,
@@ -813,7 +813,7 @@ async function loadWebLLM() {
   if (!('gpu' in navigator)) {
     $('#chat-error').textContent = 'WebGPU is not supported in this browser. Use Chrome 113+ or Edge 113+.';
     $('#chat-error').classList.remove('hidden');
-    log('WebGPU not supported — cannot load LLM.', 'error');
+    log('WebGPU not supported, cannot load LLM.', 'error');
     return;
   }
 
@@ -997,7 +997,7 @@ async function sendMessage() {
       state.benchmarkResults = state.benchmarkResults.slice(-MAX_BENCHMARK);
     }
     renderBenchmark();
-    log('Response: ' + analysis.responseWords + ' words in ' + (latencyMs / 1000).toFixed(2) + 's — scored ' + analysis.overall + '/100', 'success');
+    log('Response: ' + analysis.responseWords + ' words in ' + (latencyMs / 1000).toFixed(2) + 's, scored ' + analysis.overall + '/100', 'success');
   } catch (e) {
     $('#chat-error').textContent = 'Inference error: ' + e.message;
     $('#chat-error').classList.remove('hidden');
@@ -1032,7 +1032,7 @@ function clearChat() {
 }
 
 // ===========================================================================
-// Benchmark — same analyzer as the real app.
+// Benchmark, same analyzer as the real app.
 // ===========================================================================
 // Public benchmarks of real-world LLMs. Scores are normalized to 0-100.
 // Sources (mid-2024 numbers, can be refreshed from):
@@ -1180,7 +1180,7 @@ function renderDeviceInfo() {
   // CPU
   $('#di-cpu').textContent = info.cpu.model;
   $('#di-cpu').title = info.cpu.model;
-  $('#di-cores').textContent = info.cpu.coresLogical ? `${info.cpu.coresLogical} cores` : '—';
+  $('#di-cores').textContent = info.cpu.coresLogical ? `${info.cpu.coresLogical} cores` : '-';
   $('#cpu-cores-footer').textContent = info.cpu.coresLogical ? `${info.cpu.coresLogical} logical cores` : 'cores unknown';
 
   // RAM
@@ -1218,14 +1218,14 @@ function renderDeviceInfo() {
     $('#di-gpu').textContent = 'Not detected';
     $('#di-gpu').classList.add('muted');
     $('#di-gpu').classList.remove('accent');
-    $('#di-vram').textContent = '—';
+    $('#di-vram').textContent = '-';
     $('#di-vram').classList.add('muted');
     $('#di-vram').classList.remove('accent');
     gpuAvailEl?.classList.remove('hidden');
     gpuMetricsEl?.classList.add('hidden');
     gpuChartEl?.classList.add('hidden');
-    $('#gpu-temp-wrap').textContent = '—';
-    $('#gpu-power-wrap').textContent = '—';
+    $('#gpu-temp-wrap').textContent = '-';
+    $('#gpu-power-wrap').textContent = '-';
   }
 }
 
@@ -1243,17 +1243,17 @@ function renderMetrics() {
   const cpuCard = $('#cpu-metrics-grid .metric-card');
   if (cpuCard) applyAccentClass(cpuCard, cpuUtil);
 
-  // GPU (conditional — real if WebGPU available, otherwise hidden)
+  // GPU (conditional, real if WebGPU available, otherwise hidden)
   if (m.gpu.available) {
     // WebGPU exposes adapter info but NOT live utilization. We can show
     // "GPU detected" with vendor info but the utilization would be fake.
     // So we show static 0% util with a note in the device card.
-    $('#gpu-util').textContent = '—';
+    $('#gpu-util').textContent = '-';
     $('#gpu-util-bar').style.width = `0%`;
-    $('#gpu-vram').textContent = '—';
-    $('#gpu-vram-total').textContent = '—';
+    $('#gpu-vram').textContent = '-';
+    $('#gpu-vram-total').textContent = '-';
     const gpuMemPct = 0;
-    $('#gpu-mem').textContent = '—';
+    $('#gpu-mem').textContent = '-';
     $('#gpu-mem-bar').style.width = `0%`;
     $('#gpu-temp-wrap').textContent = 'N/A';
     $('#gpu-power-wrap').textContent = 'N/A';
@@ -1265,7 +1265,7 @@ function renderMetrics() {
   $('#ram-pct').textContent = ramPct.toFixed(0);
   $('#ram-used').textContent = m.ram.usedGb.toFixed(2);
   // Display total: just show the number; the HTML template adds "GB"
-  $('#ram-total').textContent = ramTotal || '—';
+  $('#ram-total').textContent = ramTotal || '-';
   $('#ram-bar').style.width = `${ramPct}%`;
   const ramCard = $('#cpu-metrics-grid .metric-card[data-accent="amber"]');
   if (ramCard) applyAccentClass(ramCard, ramPct);
@@ -1288,7 +1288,7 @@ function renderMetrics() {
   $('#net-rx').textContent = m.net.rxMbps.toFixed(1);
   $('#net-tx').textContent = m.net.txMbps.toFixed(1);
 
-  $('#footer-gpu').textContent = m.gpu.available ? '—' : '—';
+  $('#footer-gpu').textContent = m.gpu.available ? '-' : '-';
   $('#footer-ram').textContent = ramPct.toFixed(0);
   $('#footer-ssd').textContent = ssdPct.toFixed(0);
   $('#footer-files').textContent = state.files.length;
@@ -1369,7 +1369,7 @@ function renderRunState() {
   dot.className = 'status-dot';
   if (state.runState === 'running') {
     dot.classList.add('running');
-    txt.textContent = 'Model active — inference running';
+    txt.textContent = 'Model active, inference running';
   } else if (state.runState === 'loading') {
     dot.classList.add('loading');
     txt.textContent = 'Loading model into VRAM…';
@@ -1508,13 +1508,13 @@ function renderConsole() {
     out.innerHTML = '<div class="console-empty">No output yet.</div>';
     return;
   }
-  const LEVEL_ICON = { info: 'ℹ', warn: '⚠', error: '✗', success: '✓' };
+  const LEVEL_ICON = { info: 'i', warn: '!', error: 'x', success: 'ok' };
   let html = '';
   state.consoleLines.forEach((l) => {
     const ts = new Date(l.ts).toLocaleTimeString('en-US', { hour12: false });
     html += `<div class="console-line ${l.level}">
       <span class="ts">${ts}</span>
-      <span class="level">${LEVEL_ICON[l.level] || 'ℹ'}</span>
+      <span class="level">${LEVEL_ICON[l.level] || 'i'}</span>
       <span class="text">${escapeHtml(l.text)}</span>
     </div>`;
   });
@@ -1686,7 +1686,7 @@ function renderVerdict() {
     <span class="report-section-count">${losesTo.length} LLM</span>
   </div>`;
   if (losesTo.length === 0) {
-    reportHtml += `<div class="report-empty">Tidak ada LLM yang lebih kuat — kamu juara!</div>`;
+    reportHtml += `<div class="report-empty">Tidak ada LLM yang lebih kuat, kamu juara!</div>`;
   } else {
     reportHtml += `<div class="report-list">`;
     losesTo.forEach((c) => {
@@ -1701,7 +1701,7 @@ function renderVerdict() {
   }
   reportHtml += `</div>`;
 
-  // Source note — gh-pages uses static benchmark data
+  // Source note, gh-pages uses static benchmark data
   reportHtml += `<div class="report-source">Source: HuggingFace Open LLM Leaderboard, LMSYS Chatbot Arena, official model cards (mid-2024 snapshot)</div>`;
 
   $('#verdict-report').innerHTML = reportHtml;
@@ -1744,7 +1744,7 @@ function renderRadarChart() {
   if (!scores) return;
   const cmp = BENCHMARKS[state.radarCompareKey];
   const cmpScores = llmBenchmarkToDimensions(cmp);
-  $('#radar-compare-name').textContent = cmp ? cmp.name : '—';
+  $('#radar-compare-name').textContent = cmp ? cmp.name : '-';
   const svg = $('#radar-user');
   const W = 320, H = 280, cx = W / 2, cy = H / 2 + 8, R = 95;
   const n = DIMENSIONS.length;
@@ -1887,7 +1887,7 @@ function wireDropzone() {
 // Init
 // ===========================================================================
 async function init() {
-  // Detect real device specs first — this is the whole point of the app.
+  // Detect real device specs first, this is the whole point of the app.
   // Wrap in try/catch so a detection failure (e.g. battery API rejection)
   // doesn't block the rest of the UI from rendering.
   try {
