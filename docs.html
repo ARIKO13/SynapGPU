@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Doc — Panduan SynapGPU</title>
+  <meta name="description" content="Langkah demi langkah: download installer, mengatasi blokir Chrome, instalasi, training dengan golongan G1-G7, sampai chat dengan model hasil training." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/landing.css" />
+  <link rel="icon" type="image/png" href="assets/img/favicon.png" />
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="index.html">
+      <img src="assets/img/logo-128.png" alt="Logo SynapGPU" />
+      <strong>SynapGPU</strong>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="docs.html" class="active">Doc</a>
+      <a href="donate.html">Donate</a>
+    </nav>
+    <div class="nav-right">
+      <a class="nav-gh" href="https://github.com/ARIKO13/SynapGPU" target="_blank" rel="noopener" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      </a>
+      <a class="btn btn-white btn-sm" href="https://github.com/ARIKO13/SynapGPU/releases/latest" target="_blank" rel="noopener">Download</a>
+    </div>
+    <button class="nav-burger" aria-label="Menu"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<main class="page">
+  <div class="wrap">
+    <p class="eyebrow">Doc</p>
+    <h1>Dari download sampai chat</h1>
+    <p class="lede">
+      Enam langkah, semuanya di komputermu. Estimasi total: 10 menit, tergantung kecepatan internet saat download.
+    </p>
+
+    <div class="prose" style="max-width: 760px;">
+
+      <div class="step">
+        <span class="step-n">1</span>
+        <div>
+          <h3>Download installer</h3>
+          <p>
+            Buka <a href="https://github.com/ARIKO13/SynapGPU/releases/latest" target="_blank" rel="noopener">halaman Releases terbaru</a>
+            dan download <strong>SynapGPU-Setup-&lt;versi&gt;.exe</strong>. Di halaman yang sama ada
+            <strong>SynapGPU-windows.zip</strong> (versi portable, tanpa instalasi) dan <strong>SHA256SUMS.txt</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-n">2</span>
+        <div>
+          <h3>Kalau Chrome memblokir download</h3>
+          <p>
+            Peringatan <em>"Dangerous download blocked"</em> adalah proteksi Safe Browsing untuk file .exe
+            yang belum punya rekam jejak — bukan tanda file berbahaya. Cara aman melanjutkan:
+          </p>
+          <ol>
+            <li>Buka <code>chrome://downloads</code> → klik <strong>Keep</strong> kalau tombolnya tersedia.</li>
+            <li>Kalau tidak ada: Settings → Privacy and security → Safe Browsing → pilih sementara <strong>No protection</strong> → download ulang → klik <strong>Keep</strong> → kembalikan ke <strong>Standard protection</strong>.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-n">3</span>
+        <div>
+          <h3>Verifikasi file (opsional, tapi disarankan)</h3>
+          <p>Bandingkan hash file yang berhasil diunduh dengan angka di <code>SHA256SUMS.txt</code> atau di catatan release:</p>
+          <pre><code>Get-FileHash .\SynapGPU-Setup-1.3.0.exe</code></pre>
+          <p>Hasilnya harus persis sama dengan yang tercantum di release. Beda satu karakter = jangan dijalankan.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-n">4</span>
+        <div>
+          <h3>Instal</h3>
+          <p>
+            Dobel-klik installer → ikuti wizard <strong>Next → Install → Finish</strong>.
+            Shortcut dibuat di Start Menu (dan di desktop kalau dicentang). Versi portable:
+            cukup ekstrak ZIP-nya lalu dobel-klik <code>SynapGPU.exe</code>.
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-n">5</span>
+        <div>
+          <h3>Pakai: drag &amp; drop → Train → Test</h3>
+          <p>
+            Jendela aplikasi muncul <strong>3–8 detik</strong> setelah dibuka — itu normal (loading runtime).
+            Alur kerjanya:
+          </p>
+          <ol>
+            <li><strong>Models</strong> — tarik file model dari file manager (GGUF, safetensors, PT/PTH, BIN, ONNX).</li>
+            <li><strong>Datasets</strong> — tarik dataset (JSONL, CSV, Parquet, TXT).</li>
+            <li><strong>Train</strong> — pilih <em>arsitektur bawaan</em> dan tentukan golongan target (tabel di bawah), atau <em>custom</em> kalau mau atur sendiri. Pilih format hasil: GGUF atau safetensors. Klik <strong>Start Training</strong>.</li>
+            <li><strong>Test</strong> — setelah selesai, model hasil training langsung bisa dicoba di chat.</li>
+          </ol>
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr><th>Golongan</th><th>Target params</th><th>Layers × Heads</th><th>d_model</th><th>Epoch</th><th>LR</th><th>Batch</th><th>Context</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>G1 — Edge</td><td>1B – 3B</td><td>24 × 20</td><td>2560</td><td>3</td><td>3e-4</td><td>8</td><td>4096</td></tr>
+                <tr><td>G2 — Core</td><td>3B – 12B</td><td>32 × 32</td><td>4096</td><td>3</td><td>1e-4</td><td>8</td><td>4096</td></tr>
+                <tr><td>G3 — Pro</td><td>12B – 40B</td><td>48 × 48</td><td>6144</td><td>2</td><td>5e-5</td><td>4</td><td>8192</td></tr>
+                <tr><td>G4 — Ultra</td><td>40B – 150B</td><td>80 × 64</td><td>8192</td><td>2</td><td>2e-5</td><td>2</td><td>8192</td></tr>
+                <tr><td>G5 — Titan</td><td>150B – 500B</td><td>110 × 96</td><td>12288</td><td>1</td><td>1e-5</td><td>1</td><td>8192</td></tr>
+                <tr><td>G6 — Sovereign</td><td>500B – 1.5T</td><td>118 × 112</td><td>14336</td><td>1</td><td>5e-6</td><td>1</td><td>16384</td></tr>
+                <tr><td>G7 — Apex</td><td>1.5T – 5T</td><td>126 × 128</td><td>16384</td><td>1</td><td>2e-6</td><td>1</td><td>16384</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-n">6</span>
+        <div>
+          <h3>Berbagi model hasil training</h3>
+          <p>
+            Hasil tersimpan di folder yang kamu tentukan. Format <code>.gguf</code> bisa langsung dipakai
+            di llama.cpp, Ollama, atau LM Studio; <code>.safetensors</code> cocok untuk fine-tune lanjutan
+            di tool lain.
+          </p>
+        </div>
+      </div>
+
+      <h2>Kebutuhan sistem</h2>
+      <ul>
+        <li>Windows 10 / 11, 64-bit. WebView2 Runtime sudah tertanam di Windows 10/11 modern.</li>
+        <li>RAM 8 GB ke atas disarankan. GPU opsional — berguna untuk benchmark dan inference cepat.</li>
+        <li>Ruang disk: sesuaikan dengan ukuran model dan dataset yang mau diproses.</li>
+      </ul>
+
+      <h2>FAQ</h2>
+      <ul>
+        <li><strong>Jendela lama muncul setelah dobel-klik — rusak?</strong> Tidak. Runtime dimuat 3–8 detik; log tersimpan di <code>%LOCALAPPDATA%\SynapGPU\synapgpu.log</code>.</li>
+        <li><strong>Apakah file saya diunggah ke mana pun?</strong> Tidak. Semua proses berjalan lokal; aplikasi tidak mengirim model/dataset ke server mana pun.</li>
+        <li><strong>Uninstall-nya di mana?</strong> Settings → Apps → SynapGPU → Uninstall, atau shortcut <em>Uninstall SynapGPU</em> di Start Menu.</li>
+        <li><strong>Versi portable vs installer?</strong> Isinya sama; installer menambahkan shortcut dan uninstaller, portable tinggal ekstrak dan jalankan.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-col">
+        <div class="foot-brand">
+          <img src="assets/img/logo-128.png" alt="" />
+          <strong>SynapGPU</strong>
+        </div>
+        <p>Workbench LLM lokal untuk Windows. Model, dataset, training, dan chat — semua tinggal di komputermu.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Navigasi</h4>
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="docs.html">Doc</a>
+        <a href="donate.html">Donate</a>
+        <a href="app/">Buka Aplikasi</a>
+      </div>
+      <div class="foot-col">
+        <h4>Eksternal</h4>
+        <a href="https://github.com/ARIKO13/SynapGPU" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/ARIKO13/SynapGPU/releases/latest" target="_blank" rel="noopener">Releases</a>
+        <a href="https://sociabuzz.com/arushiko" target="_blank" rel="noopener">Sociabuzz</a>
+      </div>
+    </div>
+    <div class="foot-base">
+      <span>&copy; 2026 ARIKO13 — SynapGPU</span>
+      <span>dibuat lokal · dijalankan lokal</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/landing.js"></script>
+</body>
+</html>
